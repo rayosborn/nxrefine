@@ -24,6 +24,8 @@ def main():
     parser.add_argument('-n', '--nodes', default=[], nargs='+',
                         help='Add nodes')
     parser.add_argument('-c', '--cores', help='Number of cores')
+    parser.add_argument('-p', '--parallel', action='store_true',
+                        help='use multiprocessing options')
     parser.add_argument('-r', '--remove', default=[], nargs='+',
                         help='Remove nodes')
     parser.add_argument(
@@ -34,7 +36,7 @@ def main():
 
     if args.directory:
         server = NXServer(directory=os.path.realpath(args.directory),
-                          server_type=args.type)
+                          server_type=args.type, parallel=args.parallel)
     elif args.type:
         server = NXServer(server_type=args.type)
     else:
