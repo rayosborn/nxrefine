@@ -16,9 +16,11 @@ import subprocess
 import timeit
 from datetime import datetime
 
+import dask.array as da
 import h5py as h5
 import numpy as np
 import scipy.fft
+from dask.distributed import Client, LocalCluster
 from h5py import is_hdf5
 from nexusformat.nexus import (NeXusError, NXcollection, NXdata, NXentry,
                                NXfield, NXlink, NXLock, NXnote, NXparameters,
@@ -244,6 +246,7 @@ class NXReduce(QtCore.QObject):
         self._default = None
         self._server = None
         self._db = None
+        self._client = None
         self._logger = None
         self._cctw = None
 
@@ -339,6 +342,15 @@ class NXReduce(QtCore.QObject):
             except Exception as error:
                 self.logger.info(str(error))
         return self._db
+
+    @property
+    def client(self):
+        if self._client is None:
+            try:
+                self._client = Client()
+            except Exception as error:
+                self.logger.info(str(error))
+        return self._client
 
     @property
     def beamline(self):
@@ -1089,6 +1101,9 @@ class NXReduce(QtCore.QObject):
 
     def find_maximum(self):
         self.logger.info("Finding maximum counts")
+        if self.client is None:
+            raise NeXusError('No Dask client running')
+        tic = self.start_progress(0, 3)
         with self.field.nxfile:
             maximum = 0.0
             chunk_size = self.field.chunks[0]
@@ -1109,31 +1124,21 @@ class NXReduce(QtCore.QObject):
             mask[np.where(pixel_mean < 100)] = 0
             pixel_mask = pixel_mask | mask
             transmission_mask = self.transmission_coordinates()
-            # Start looping over the data
-            tic = self.start_progress(self.first, self.last)
-            for i in range(self.first, self.last, chunk_size):
-                if self.stopped:
-                    return None
-                self.update_progress(i)
-                try:
-                    v = data[i:i+chunk_size, :, :]
-                except IndexError:
-                    pass
-                if i == self.first:
-                    vsum = v.sum(0)
-                else:
-                    vsum += v.sum(0)
-                v = np.ma.masked_array(v)
-                v.mask = pixel_mask
-                fsum[i:i+chunk_size] = v.sum((1, 2))
-                v.mask = pixel_mask | transmission_mask
-                psum[i:i+chunk_size] = v.sum((1, 2))
-                if maximum < v.max():
-                    maximum = v.max()
-                del v
+            data = da.from_array(self.field.nxfile[self.raw_path],
+                                 chunks='auto')
+            v = da.ma.masked_array(data)
+            v.mask = pixel_mask
+            pv = da.ma.masked_array(data)
+            pv.mask = pixel_mask | transmission_mask
+            maximum = v.max().compute()
+            self.update_progress(0)
+            vsum = v[self.first:self.last].sum(0).compute()
+            self.update_progress(1)
+            fsum = v.sum((1, 2)).compute()
+            self.update_progress(2)
+            psum = pv.sum((1, 2)).compute()
+            self.update_progress(3)
         self.pixel_mask = pixel_mask
-        vsum = np.ma.masked_array(vsum)
-        vsum.mask = pixel_mask
         self.maximum = maximum
         self.summed_data = NXfield(vsum, name='summed_data')
         self.summed_frames = NXfield(fsum, name='summed_frames')
