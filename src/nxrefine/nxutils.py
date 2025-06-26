@@ -11,6 +11,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import get_context, resource_tracker
 
 import numpy as np
+from dask import array as da
+from dask.distributed.client import futures_of
+from dask.distributed.diagnostics.progressbar import TextProgressBar
 
 if sys.version_info < (3, 10):
     from importlib_resources import files as package_files
@@ -58,29 +61,18 @@ def peak_search(data_file, data_path, i, j, k, threshold, mask=None,
     if mask is not None:
         data = np.where(mask, 0, data)
 
-    nframes = data.shape[0]
-    saved_blobs = []
-    last_blobs = []
-    for z in range(nframes):
-        blobs = [
-            NXBlob(x, y, z, data[z, int(y), int(x)], min_pixels=min_pixels)
-            for y, x in peak_local_max(
-                data[z], min_distance=min_pixels, threshold_abs=threshold
-            )
+    blobs = [
+        NXBlob(x, y, z, data[int(z), int(y), int(x)], min_pixels=min_pixels)
+            for z, y, x in peak_local_max(data,
+                                          min_distance=min_pixels,
+                                          threshold_abs=threshold)
         ]
-        for lb in last_blobs:
-            found = False
-            for b in blobs:
-                if lb == b:
-                    found = True
-                    b.update(lb)
-            if not found:
-                lb.refine(data)
-                if lb.is_valid():
-                    saved_blobs.append(lb)
-        last_blobs = blobs
-    for blob in saved_blobs:
-        blob.z += j
+    saved_blobs = []
+    for blob in blobs:
+        blob.refine(data)
+        if blob.is_valid():
+            blob.z += j
+            saved_blobs.append(blob)
     return i, saved_blobs
 
 
@@ -182,13 +174,13 @@ def fill_gaps(mask, mask_gaps):
         gaps = consecutive(np.where(mask_gaps.sum(i) == mask_gaps.shape[i])[0])
         for gap in gaps:
             if i == 0:
-                mask[:, :, gap[0]:gap[-1]+1] = np.tile(np.expand_dims(
-                    np.maximum(mask[:, :, gap[0]-1],
+                mask[:, :, gap[0]:gap[-1]+1] = da.tile(da.expand_dims(
+                    da.maximum(mask[:, :, gap[0]-1],
                                mask[:, :, gap[-1]+1]), 2),
                     (1, 1, len(gap)))
             else:
-                mask[:, gap[0]:gap[-1]+1, :] = np.tile(np.expand_dims(
-                    np.maximum(mask[:, gap[0]-1, :],
+                mask[:, gap[0]:gap[-1]+1, :] = da.tile(da.expand_dims(
+                    da.maximum(mask[:, gap[0]-1, :],
                                mask[:, gap[-1]+1, :]), 1),
                     (1, len(gap), 1))
     return mask
@@ -201,9 +193,9 @@ def local_sum(X, K):
     for i in range(d):
         zeros_shape = list(G.shape)
         zeros_shape[i] = K.shape[i]
-        G_1 = np.concatenate([G, np.zeros(zeros_shape)], axis=i)
-        G_2 = np.concatenate([np.zeros(zeros_shape), G], axis=i)
-        G = np.cumsum(G_1-G_2, axis=i)
+        G_1 = da.concatenate([G, da.zeros(zeros_shape)], axis=i)
+        G_2 = da.concatenate([da.zeros(zeros_shape), G], axis=i)
+        G = da.cumsum(G_1-G_2, axis=i)
     G = G[tuple(slice(None, -1, None) for _ in range(d))]
     return G
 
@@ -238,8 +230,7 @@ def local_sum_same(X, K, padding):
     return G
 
 
-def mask_volume(data_file, data_path, mask_file, mask_path, i, j, k,
-                pixel_mask, threshold_1=2, horiz_size_1=11,
+def mask_volume(data, pixel_mask, threshold_1=2, horiz_size_1=11,
                 threshold_2=0.8, horiz_size_2=51):
     """Generate a 3D mask around Bragg peaks.
 
@@ -253,12 +244,6 @@ def mask_volume(data_file, data_path, mask_file, mask_path, i, j, k,
         File path to the mask file
     mask_path : str
         Internal path to the mask array
-    i : int
-        Index of first z-value of output mask
-    j : int
-        Index of first z-value of processed slab
-    k : int
-        Index of last z-value of processed slab
     pixel_mask : array-like
         2D detector mask. This has to be the same shape as the last two
         dimensions of the 3D slab. Values of 1 represent masked pixels.
@@ -274,52 +259,38 @@ def mask_volume(data_file, data_path, mask_file, mask_path, i, j, k,
         Queue used in multiprocessing, by default None
     """
 
-    nxsetconfig(lock=3600, lockexpiry=28800)
-    with nxopen(data_file, 'r') as data_root:
-        volume = data_root[data_path][j:k].nxvalue
-
     horiz_size_1, horiz_size_2 = int(horiz_size_1), int(horiz_size_2)
     sum1, sum2 = horiz_size_1**2, horiz_size_2**2
-    horiz_kern_1 = np.ones((1, horiz_size_1, horiz_size_1))
-    horiz_kern_2 = np.ones((1, horiz_size_2, horiz_size_2))
+    horiz_kern_1 = da.ones((1, horiz_size_1, horiz_size_1), dtype=np.int32)
+    horiz_kern_2 = da.ones((1, horiz_size_2, horiz_size_2), dtype=np.int32)
 
-    diff_volume = volume[1:] - volume[:-1]
+    diff_volume = data[1:] - data[:-1]
 
     padded_length = [0, horiz_size_1, horiz_size_1]
     vol_smoothed = local_sum_same(
-        np.pad(
-            diff_volume,
-            pad_width=((0, 0),
-                       (horiz_size_1, horiz_size_1),
-                       (horiz_size_1, horiz_size_1)),
-            mode='edge'),
-        horiz_kern_1, padded_length)
+        da.pad(diff_volume, pad_width=((0, 0),
+                                       (horiz_size_1, horiz_size_1),
+                                       (horiz_size_1, horiz_size_1)),
+               mode='edge'), horiz_kern_1, padded_length)
     vol_smoothed /= sum1
 
-    vol_smoothed[np.abs(vol_smoothed) < threshold_1] = 0
+    vol_smoothed[da.abs(vol_smoothed) < threshold_1] = 0
 
     vol_smoothed[vol_smoothed < 0] = 1
     vol_smoothed[vol_smoothed > 0] = 1
 
-    vol_smoothed = fill_gaps(vol_smoothed, pixel_mask)
+    # vol_smoothed = fill_gaps(vol_smoothed, pixel_mask)
 
     padded_length = [0, horiz_size_2, horiz_size_2]
     vol_smoothed = local_sum_same(
-        np.pad(
-            vol_smoothed,
-            pad_width=((0, 0),
-                       (horiz_size_2, horiz_size_2),
-                       (horiz_size_2, horiz_size_2)),
-            mode='edge'),
-        horiz_kern_2, padded_length)
+        da.pad(vol_smoothed, pad_width=((0, 0),
+                                        (horiz_size_2, horiz_size_2),
+                                        (horiz_size_2, horiz_size_2)),
+               mode='edge'), horiz_kern_2, padded_length)
     vol_smoothed /= sum2
     vol_smoothed[vol_smoothed < threshold_2] = 0
     vol_smoothed[vol_smoothed > threshold_2] = 1
-    nxsetconfig(lock=3600, lockexpiry=28800)
-    with nxopen(mask_file, 'rw') as mask_root:
-        mask_root[mask_path][j+1:k-1] = (
-            np.maximum(vol_smoothed[0:-1], vol_smoothed[1:]))
-    return i
+    return da.maximum(vol_smoothed[0:-1], vol_smoothed[1:]).astype(np.int8)
 
 
 def init_julia():
@@ -684,7 +655,6 @@ class SpecParser:
 
     def metadata_NXlog(self, spec_metadata, description):
         """Return the specific metadata in an NXlog object."""
-        from spec2nexus import utils
         nxlog = NXlog()
         nxlog.attrs['description'] = description
         for subkey, value in spec_metadata.items():
@@ -703,10 +673,30 @@ class NXExecutor(ProcessPoolExecutor):
         super().__init__(max_workers=max_workers, mp_context=mp_context)
 
     def __repr__(self):
-        return f"NXExecutor(max_workers={self._max_workers})"
+        return "NXExecutor()"
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.shutdown(wait=True)
         if self._mp_context.get_start_method(allow_none=False) != 'fork':
             resource_tracker._resource_tracker._stop()
         return False
+
+
+class NXProgressBar(TextProgressBar):
+
+    def __init__(self, futures, update=None, **kwargs):
+        self.update = update
+        super().__init__(futures_of(futures), **kwargs)
+
+    def _draw_bar(self, remaining, all, **kwargs):
+        frac = (1 - remaining / all) if all else 1.0
+        try:
+            self.update.emit(int(100 * frac))
+        except ValueError:
+            pass
+        
+    def _draw_stop(self, **kwargs):
+        try:
+            self.update.emit(100)
+        except ValueError:
+            pass

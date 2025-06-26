@@ -15,9 +15,11 @@ import shutil
 import subprocess
 import timeit
 
+import dask.array as da
 import h5py as h5
 import numpy as np
 import scipy.fft
+from dask.distributed import Client, progress
 from h5py import is_hdf5
 from nexusformat.nexus import (NeXusError, NXcollection, NXdata, NXentry,
                                NXfield, NXlink, NXLock, NXnote, NXparameters,
@@ -32,7 +34,8 @@ from .nxrefine import NXRefine
 from .nxserver import NXServer
 from .nxsettings import NXSettings
 from .nxsymmetry import NXSymmetry
-from .nxutils import init_julia, load_julia, mask_volume, peak_search
+from .nxutils import (NXProgressBar, init_julia, load_julia, mask_volume,
+                      peak_search)
 
 
 class NXReduce(QtCore.QObject):
@@ -44,84 +47,84 @@ class NXReduce(QtCore.QObject):
     is instantiated by the entry in the experimental NeXus file corresponding
     to a single 360° rotation of the crystal.
 
-        Parameters
-        ----------
-        entry : NXentry or str, optional
-            Entry containing the rotation scan, by default None
-        directory : str, optional
-            Path to the directory containing the raw data, by default None
-        parent : str, optional
-            File path to the parent NeXus file, by default None
-        entries : list of str, optional
-            List of all the rotation scan entries in the file, by default None
-        threshold : float, optional
-            Threshold used to in Bragg peak searches, by default None
-        min_pixels : int, optional
-            Minimum number of pixels required in Bragg peak searches, by
-            default 10
-        first : int, optional
-            First frame included in the data reduction, by default None
-        last : int, optional
-            Last frame included in the data reduction, by default None
-        polar_max : float, optional
-            Maximum polar angle in peak refinements, by default None
-        hkl_tolerance : float, optional
-            Q-tolerance in Å-1 for including a peak in a refinement,
-            by default None
-        monitor : str, optional
-            Name of monitor used in normalizations, by default None
-        norm : float, optional
-            Value used to normalize monitor counts, by default None
-        polarization : float, optional
-            Value of beam polarization, by default None
-        qmin : float, optional
-            Minimum Q used in calculating transmissions, by default None
-        qmax : float, optional
-            Maximum Q used in PDF taper function, by default None
-        radius : float, optional
-            Radius used in punching holes in inverse Angstroms, by default None
-        mask_parameters : dict, optional
-            Thresholds and convolution sizes used to prepare 3D masks, by
-            default None.
-        Qh : tuple of floats, optional
-            Minimum, step size, and maximum value of Qh array, by default None
-        Qk : tuple of floats, optional
-            Minimum, step size, and maximum value of Qk array, by default None
-        Ql : tuple of floats, optional
-            Minimum, step size, and maximum value of Ql array, by default None
-        load : bool, optional
-            Load raw data files, by default False
-        link : bool, optional
-            Link metadata, by default False
-        copy : bool, optional
-            Copy refinement and transform parameters, by default False
-        maxcount : bool, optional
-            Determine maximum counts, by default False
-        find : bool, optional
-            Find Bragg peaks, by default False
-        refine : bool, optional
-            Refine lattice parameters and orientation matrix, by default False
-        prepare : bool, optional
-            Prepare the 3D data mask, by default False
-        transform : bool, optional
-            Transform the data into Q, by default False
-        combine: bool, optional
-            Combine transformed data
-        pdf: bool, optional
-            Create PDF transforms
-        lattice : bool, optional
-            Refine the lattice parameters, by default False
-        mask : bool, optional
-            Use mask in performing transforms, by default False
-        overwrite : bool, optional
-            Overwrite previous analyses, by default False
-        monitor_progress : bool, optional
-            Monitor progress at the command line, by default False
-        gui : bool, optional
-            Use PyQt signals to monitor progress, by default False
-        server : NXServer
-            NXServer instance if available, by default None
-        """
+    Parameters
+    ----------
+    entry : NXentry or str, optional
+        Entry containing the rotation scan, by default None
+    directory : str, optional
+        Path to the directory containing the raw data, by default None
+    parent : str, optional
+        File path to the parent NeXus file, by default None
+    entries : list of str, optional
+        List of all the rotation scan entries in the file, by default None
+    threshold : float, optional
+        Threshold used to in Bragg peak searches, by default None
+    min_pixels : int, optional
+        Minimum number of pixels required in Bragg peak searches, by
+        default 10
+    first : int, optional
+        First frame included in the data reduction, by default None
+    last : int, optional
+        Last frame included in the data reduction, by default None
+    polar_max : float, optional
+        Maximum polar angle in peak refinements, by default None
+    hkl_tolerance : float, optional
+        Q-tolerance in Å-1 for including a peak in a refinement,
+        by default None
+    monitor : str, optional
+        Name of monitor used in normalizations, by default None
+    norm : float, optional
+        Value used to normalize monitor counts, by default None
+    polarization : float, optional
+        Value of beam polarization, by default None
+    qmin : float, optional
+        Minimum Q used in calculating transmissions, by default None
+    qmax : float, optional
+        Maximum Q used in PDF taper function, by default None
+    radius : float, optional
+        Radius used in punching holes in inverse Angstroms, by default None
+    mask_parameters : dict, optional
+        Thresholds and convolution sizes used to prepare 3D masks, by
+        default None.
+    Qh : tuple of floats, optional
+        Minimum, step size, and maximum value of Qh array, by default None
+    Qk : tuple of floats, optional
+        Minimum, step size, and maximum value of Qk array, by default None
+    Ql : tuple of floats, optional
+        Minimum, step size, and maximum value of Ql array, by default None
+    load : bool, optional
+        Load raw data files, by default False
+    link : bool, optional
+        Link metadata, by default False
+    copy : bool, optional
+        Copy refinement and transform parameters, by default False
+    maxcount : bool, optional
+        Determine maximum counts, by default False
+    find : bool, optional
+        Find Bragg peaks, by default False
+    refine : bool, optional
+        Refine lattice parameters and orientation matrix, by default False
+    prepare : bool, optional
+        Prepare the 3D data mask, by default False
+    transform : bool, optional
+        Transform the data into Q, by default False
+    combine: bool, optional
+        Combine transformed data
+    pdf: bool, optional
+        Create PDF transforms
+    lattice : bool, optional
+        Refine the lattice parameters, by default False
+    mask : bool, optional
+        Use mask in performing transforms, by default False
+    overwrite : bool, optional
+        Overwrite previous analyses, by default False
+    monitor_progress : bool, optional
+        Monitor progress at the command line, by default False
+    gui : bool, optional
+        Use PyQt signals to monitor progress, by default False
+    server : NXServer
+        NXServer instance if available, by default None
+    """
 
     def __init__(
             self, entry=None, directory=None, parent=None, entries=None,
@@ -237,11 +240,14 @@ class NXReduce(QtCore.QObject):
         self.server_settings = NXSettings().settings['server']
         self.log_file = os.path.join(self.task_directory, 'nxlogger.log')
 
-        self.timer = {}
+        self.task_timer = {}
 
         self.summed_frames = None
         self.partial_frames = None
         self.summed_data = None
+
+        self.dask_client = None
+        self.dask_progress = None
 
         self._stopped = False
         self._process_count = None
@@ -861,7 +867,7 @@ class NXReduce(QtCore.QObject):
                 'detector' in self.entry['instrument'] and
                 'orientation_matrix' in self.entry['instrument/detector'])
 
-    def start_progress(self, start, stop):
+    def start_progress(self, start=0, stop=100):
         """Initialize a counter to monitor progress completing a task.
 
         Parameters
@@ -886,21 +892,31 @@ class NXReduce(QtCore.QObject):
         self.stopped = False
         return timeit.default_timer()
 
-    def update_progress(self, i):
+    def update_progress(self, value):
         """Update the progress counter."""
-        if self.gui:
-            _value = int(i/self._step)
+        if self.dask_client:
+            if self.gui:
+                self.dask_progress = NXProgressBar(value, update=self.update)
+            else:
+                progress(value, notebook=False)
+        elif self.gui:
+            _value = int(value/self._step)
             if _value > self._value:
                 self.update.emit(_value)
                 self._value = _value
         elif self.monitor_progress:
-            print(f"\rFrame {i}", end="")
+            print(f"\rFrame {value}", end="")
 
     def stop_progress(self):
         """Stop the progress counter and return the timer value."""
+        if self.gui:
+            self.stop.emit()
+            self.stopped = True
+            if self.dask_client:
+                self.dask_client = None
+                self.dask_progress = None
         if self.monitor_progress:
             print('')
-        self.stopped = True
         return timeit.default_timer()
 
     @property
@@ -957,7 +973,7 @@ class NXReduce(QtCore.QObject):
         """Record that a task has started in the database """
         try:
             self.db.start_task(self.wrapper_file, task, self.entry_name)
-            self.timer[task] = timeit.default_timer()
+            self.task_timer[task] = timeit.default_timer()
             self.log(f"{self.name}: '{task}' started")
         except Exception as error:
             self.log(str(error))
@@ -966,7 +982,7 @@ class NXReduce(QtCore.QObject):
         """Record that a task has ended in the database """
         try:
             self.db.end_task(self.wrapper_file, task, self.entry_name)
-            elapsed_time = timeit.default_timer() - self.timer[task]
+            elapsed_time = timeit.default_timer() - self.task_timer[task]
             self.log(
                 f"{self.name}: '{task}' complete ({elapsed_time:g} seconds)")
         except Exception as error:
@@ -976,7 +992,7 @@ class NXReduce(QtCore.QObject):
         """Record that a task has failed in the database """
         try:
             self.db.fail_task(self.wrapper_file, task, self.entry_name)
-            elapsed_time = timeit.default_timer() - self.timer[task]
+            elapsed_time = timeit.default_timer() - self.task_timer[task]
             self.log(f"'{task}' failed ({elapsed_time:g} seconds)")
         except Exception as error:
             self.log(str(error))
@@ -1158,7 +1174,6 @@ class NXReduce(QtCore.QObject):
                 if self.gui:
                     if result:
                         self.result.emit(result)
-                    self.stop.emit()
                 else:
                     self.write_maximum()
                     self.write_parameters(first=self.first, last=self.last)
@@ -1191,13 +1206,12 @@ class NXReduce(QtCore.QObject):
         """
         self.log("Finding maximum counts")
         with self.field.nxfile:
-            maximum = 0.0
-            chunk_size = self.field.chunks[0]
-            if chunk_size < 20:
-                chunk_size = 50
-            data = self.field.nxfile[self.raw_path]
-            fsum = np.zeros(self.nframes, dtype=np.float64)
-            psum = np.zeros(self.nframes, dtype=np.float64)
+            self.dask_client = Client(n_workers=self.process_count)
+            chunk_size = [10*chunk for chunk in self.field.chunks]
+            data = da.from_array(self.field.nxfile[self.raw_path],
+                                 chunks=chunk_size)
+            fsum = da.zeros(self.nframes, dtype=np.float64)
+            psum = da.zeros(self.nframes, dtype=np.float64)
             pixel_mask = self.pixel_mask
             # Add constantly firing pixels to the mask
             pixel_max = np.zeros((self.shape[1], self.shape[2]))
@@ -1208,40 +1222,29 @@ class NXReduce(QtCore.QObject):
             mask = np.zeros((self.shape[1], self.shape[2]), dtype=np.int8)
             mask[np.where(pixel_max == pixel_mean)] = 1
             mask[np.where(pixel_mean < 100)] = 0
-            pixel_mask = pixel_mask | mask
-            transmission_mask = self.transmission_coordinates()
-            # Start looping over the data
-            tic = self.start_progress(self.first, self.last)
-            for i in range(self.first, self.last, chunk_size):
-                if self.stopped:
-                    return None
-                self.update_progress(i)
-                try:
-                    v = data[i:i+chunk_size, :, :]
-                except IndexError:
-                    pass
-                if i == self.first:
-                    vsum = v.sum(0)
-                else:
-                    vsum += v.sum(0)
-                v = np.ma.masked_array(v)
-                v.mask = pixel_mask
-                fsum[i:i+chunk_size] = v.sum((1, 2))
-                v.mask = pixel_mask | transmission_mask
-                psum[i:i+chunk_size] = v.sum((1, 2))
-                if maximum < v.max():
-                    maximum = v.max()
-                del v
-        self.pixel_mask = pixel_mask
-        vsum = np.ma.masked_array(vsum)
-        vsum.mask = pixel_mask
-        self.maximum = maximum
+            self.pixel_mask = pixel_mask | mask
+            transmission_mask = (self.transmission_coordinates() |
+                                 self.pixel_mask)
+            tic = self.start_progress()
+            v = da.ma.masked_array(data,
+                mask=da.broadcast_to(pixel_mask, data.shape))
+            vmax = v[self.first:self.last].max()
+            vsum = v[self.first:self.last].sum(0)
+            fsum[self.first:self.last] = v[self.first:self.last].sum((1, 2))
+            w = da.ma.masked_array(data,
+                mask=da.broadcast_to(transmission_mask, data.shape))
+            psum[self.first:self.last] = w[self.first:self.last].sum((1, 2))
+            sums = self.dask_client.persist((vmax, vsum, fsum, psum))
+            self.update_progress(sums)
+            vmax, vsum, fsum, psum = [s.compute() for s in sums]
+            self.dask_client.shutdown()
+        self.maximum = vmax
         self.summed_data = NXfield(vsum, name='summed_data')
         self.summed_frames = NXfield(fsum, name='summed_frames')
         self.partial_frames = NXfield(psum, name='partial_frames')
         toc = self.stop_progress()
-        self.log(f"Maximum counts: {maximum} ({(toc-tic):g} seconds)")
-        result = NXcollection(NXfield(maximum, name='maximum'),
+        self.log(f"Maximum counts: {self.maximum} ({(toc-tic):g} seconds)")
+        result = NXcollection(NXfield(self.maximum, name='maximum'),
                               self.summed_data, self.summed_frames,
                               self.partial_frames)
         return result
@@ -1510,13 +1513,16 @@ class NXReduce(QtCore.QObject):
         self.log("Finding peaks")
         tic = self.start_progress(self.first, self.last)
         self.blobs = []
+        chunk = 100
+        border = self.min_pixels
         if self.concurrent:
             from nxrefine.nxutils import NXExecutor, as_completed
             with NXExecutor(max_workers=self.process_count,
                             mp_context=self.concurrent) as executor:
                 futures = []
-                for i in range(self.first, self.last+1, 50):
-                    j, k = i - min(5, i), min(i+55, self.last+5, self.nframes)
+                for i in range(self.first, self.last+1, chunk):
+                    j = i - min(border, i)
+                    k = min(i+chunk+border, self.last+border, self.nframes)
                     futures.append(executor.submit(
                         peak_search,
                         self.field.nxfilename, self.field.nxfilepath,
@@ -1525,18 +1531,19 @@ class NXReduce(QtCore.QObject):
                 for future in as_completed(futures):
                     z, blobs = future.result()
                     self.blobs += [b for b in blobs if b.z >= z
-                                   and b.z < min(z+50, self.last)]
+                                   and b.z < min(z+chunk, self.last)]
                     self.update_progress(z)
                     futures.remove(future)
         else:
-            for i in range(self.first, self.last+1, 50):
-                j, k = i - min(5, i), min(i+55, self.last+5, self.nframes)
+            for i in range(self.first, self.last+1, chunk):
+                j = i - min(border, i)
+                k = min(i+chunk+border, self.last+border, self.nframes)
                 z, blobs = peak_search(
                     self.field.nxfilename, self.field.nxfilepath,
                     i, j, k, self.threshold, mask=self.pixel_mask,
                     min_pixels=self.min_pixels)
                 self.blobs += [b for b in blobs if b.z >= z
-                               and b.z < min(z+50, self.last)]
+                               and b.z < min(z+chunk, self.last)]
                 self.update_progress(z)
 
         peaks = sorted([b for b in self.blobs], key=operator.attrgetter('z'))
@@ -1709,48 +1716,43 @@ class NXReduce(QtCore.QObject):
 
     def prepare_mask(self):
         """Prepare 3D mask"""
-        tic = self.start_progress(self.first, self.last)
         t1 = self.mask_parameters['threshold_1']
         h1 = self.mask_parameters['horizontal_size_1']
         t2 = self.mask_parameters['threshold_2']
         h2 = self.mask_parameters['horizontal_size_2']
+        pixel_mask = self.pixel_mask
 
-        mask_root = nxopen(self.mask_file+'.h5', 'w')
-        mask_root['entry'] = NXentry()
-        mask_root['entry/mask'] = (
-            NXfield(shape=self.shape, dtype=np.int8, fillvalue=0))
-
-        if self.concurrent:
-            from nxrefine.nxutils import NXExecutor, as_completed
-            with NXExecutor(max_workers=self.process_count,
-                            mp_context=self.concurrent) as executor:
-                futures = []
-                for i in range(self.first, self.last+1, 10):
-                    j, k = i - min(1, i), min(i+11, self.last+1, self.nframes)
-                    futures.append(executor.submit(
-                        mask_volume,
-                        self.field.nxfilename, self.field.nxfilepath,
-                        mask_root.nxfilename, 'entry/mask', i, j, k,
-                        self.pixel_mask, t1, h1, t2, h2))
-                for future in as_completed(futures):
-                    k = future.result()
-                    self.update_progress(k)
-                    futures.remove(future)
-        else:
-            for i in range(self.first, self.last+1, 10):
-                j, k = i - min(1, i), min(i+11, self.last+1, self.nframes)
-                k = mask_volume(self.field.nxfilename, self.field.nxfilepath,
-                                mask_root.nxfilename, 'entry/mask', i, j, k,
-                                self.pixel_mask, t1, h1, t2, h2)
-                self.update_progress(k)
-
-        frame_mask = np.ones(shape=self.shape[1:], dtype=np.int8)
-        with mask_root.nxfile:
-            mask_root['entry/mask'][:self.first] = frame_mask
-            mask_root['entry/mask'][self.last+1:] = frame_mask
-
+        tic = self.start_progress()
+        self.dask_client = Client(n_workers=self.process_count)
+        with self.field.nxfile:
+            chunk_size = [2 * self.field.chunks[0],
+                          10 * self.field.chunks[1],
+                          10 * self.field.chunks[2]]
+            data = da.from_array(self.field.nxfile[self.raw_path],
+                                 chunks=chunk_size)
+            masked_data = da.ma.masked_array(data,
+                mask=da.broadcast_to(pixel_mask, data.shape))
+            starts = range(self.first, self.last+1, chunk_size[0])
+            futures = []
+            for start in starts:
+                j = start - min(1, start)
+                k = min(start+chunk_size[0], self.last+1, self.nframes)
+                mask = mask_volume(masked_data[j:k], pixel_mask,
+                                   t1, h1, t2, h2)
+                future = self.dask_client.persist(mask)
+                futures.append(future)
+            self.update_progress(futures)
+            with nxopen(self.mask_file, 'w') as mask_root:
+                mask_root['entry'] = NXentry()
+                mask_root['entry/mask'] = (
+                    NXfield(shape=self.shape, dtype=np.int8, fillvalue=1))
+                for start, mask in zip(starts, futures):
+                    j = start - min(1, start)
+                    k = min(start+chunk_size[0], self.last+1, self.nframes)
+                    mask_root['entry/mask'][j+1:k-1] = mask.compute()
+        self.dask_client.shutdown()
         toc = self.stop_progress()
-
+    
         self.log(f"3D Mask prepared in {toc-tic:g} seconds")
 
         return mask_root['entry/mask']
@@ -2373,13 +2375,16 @@ class NXMultiReduce(NXReduce):
 
     def symmetrize_transform(self):
         self.log(f"{self.title}: Transform being symmetrized")
-        tic = timeit.default_timer()
         symm_root = nxopen(self.symm_file, 'w')
         symm_root['entry'] = NXentry()
         symm_root['entry/data'] = NXdata()
+        self.dask_client = Client(n_workers=self.process_count)
+        tic = self.start_progress()
         symmetry = NXSymmetry(self.entry[self.transform_path],
                               laue_group=self.refine.laue_group)
-        symm_root['entry/data/data'] = symmetry.symmetrize(entries=True)
+        result = symmetry.symmetrize(entries=True)
+        symm_root['entry/data/data'] = result.compute()
+        self.dask_client.shutdown()
         symm_root['entry/data'].nxsignal = symm_root['entry/data/data']
         symm_root['entry/data'].nxweights = 1.0 / self.taper
         symm_root['entry/data'].nxaxes = self.entry[self.transform_path].nxaxes
@@ -2394,7 +2399,7 @@ class NXMultiReduce(NXReduce):
                 '/entry/data/data_weights', file=self.symm_file)
             self.add_title(self.entry[self.symm_data])
         self.log(f"'{self.symm_data}' added to entry")
-        toc = timeit.default_timer()
+        toc = self.stop_progress()
         self.log(f"{self.title}: Symmetrization completed "
                          f"({toc-tic:g} seconds)")
 
@@ -2426,19 +2431,20 @@ class NXMultiReduce(NXReduce):
         tic = timeit.default_timer()
         if qmax is None:
             qmax = self.qmax
-        Z, Y, X = np.meshgrid(self.Ql * self.refine.cstar,
+        Z, Y, X = da.meshgrid(self.Ql * self.refine.cstar,
                               self.Qk * self.refine.bstar,
                               self.Qh * self.refine.astar,
                               indexing='ij')
-        taper = np.ones(X.shape, dtype=np.float32)
-        R = 2 * np.sqrt(X**2 + Y**2 + Z**2) / qmax
-        idx = (R > 1.0) & (R < 2.0)
-        taper[idx] = 0.5 * (1 - np.cos(R[idx] * np.pi))
+        taper = da.ones(X.shape, dtype=np.float32)
+        R = 2 * da.sqrt(X**2 + Y**2 + Z**2) / qmax
+        condition = (R > 1.0) & (R < 2.0)
+        new_values = 0.5 * (1 - da.cos(R * np.pi))
+        taper = da.where(condition, new_values, taper)
         taper[R >= 2.0] = taper.min()
         toc = timeit.default_timer()
         self.log(f"{self.title}: Taper function calculated "
                          f"({toc-tic:g} seconds)")
-        return taper
+        return taper.compute()
 
     def total_pdf(self):
         if os.path.exists(self.total_pdf_file):
