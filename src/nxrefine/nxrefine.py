@@ -719,8 +719,8 @@ class NXRefine:
         lines.append(f'parameters.gridDim = {self.grid_step};')
         lines.append('parameters.gridOffset = [0,0,0];')
         lines.append('parameters.extraFlip = false;')
-        lines.append(
-            f'inputData.chunkSize = {list(self.entry["data/data"].chunks)};')
+        input_chunks = [int(c) for c in self.entry['data/data'].chunks[::-1]]
+        lines.append(f'inputData.chunkSize = {input_chunks};')
         lines.append(f'outputData.dimensions = {list(self.grid_shape)};')
         lines.append('outputData.chunkSize = [50,50,50];')
         lines.append('outputData.compression = 0;')
