@@ -1717,8 +1717,10 @@ class NXReduce(QtCore.QObject):
 
         mask_root = nxopen(self.mask_file+'.h5', 'w')
         mask_root['entry'] = NXentry()
-        mask_root['entry/mask'] = (
-            NXfield(shape=self.shape, dtype=np.int8, fillvalue=0))
+        mask_root['entry/mask'] = NXfield(shape=self.shape,
+                                          dtype=np.int8,
+                                          chunks=self.field.chunks,
+                                          fillvalue=0)
 
         if self.concurrent:
             from nxrefine.nxutils import NXExecutor, as_completed
