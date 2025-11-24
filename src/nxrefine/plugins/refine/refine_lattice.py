@@ -73,7 +73,9 @@ class RefineLatticeDialog(NXDialog):
         self.set_title('Refining Lattice')
 
         self.peaks_box = None
+        self.peak_table = None
         self.peak_model = None
+        self.cell_table = None
         self.cell_model = None
         self.orient_box = None
         self.update_box = None
@@ -1048,6 +1050,27 @@ class RefineLatticeDialog(NXDialog):
                 from . import transform_data
                 transform_data.show_dialog()
         super().accept()
+
+    def closeEvent(self, event):
+        try:
+            if self.peaks_box is not None:
+                self.peaks_box.close()
+        except Exception:
+            pass
+        try:
+            if self.orient_box is not None:
+                self.orient_box.close()
+        except Exception:
+            pass
+        try:
+            self.orient_box.close()
+        except Exception:
+            pass
+        try:
+            self.update_box.close()
+        except Exception:
+            pass
+        super().closeEvent(event)
 
 
 class NXPeakModel(QtCore.QAbstractTableModel):
