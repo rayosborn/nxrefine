@@ -18,7 +18,7 @@ from nexpy.gui.widgets import (NXDialog, NXLabel, NXPlainTextEdit,
 from nexusformat.nexus import NeXusError, nxload
 
 from nxrefine.nxdatabase import NXDatabase
-from nxrefine.nxreduce import NXMultiReduce, NXReduce
+from nxrefine.nxreduce import NXMultiReduce
 from nxrefine.nxserver import NXServer
 
 
@@ -433,12 +433,6 @@ class WorkflowDialog(NXDialog):
                 return True
         return False
 
-    def only_combined(self, scan):
-        for task in [t for t in self.tasks if t not in self.combined_tasks]:
-            if self.selected(scan, task):
-                return False
-        return True
-
     def queued(self, scan, task):
         self.scans[scan][task].setCheckState(QtCore.Qt.PartiallyChecked)
         self.scans[scan][task].setStyleSheet("")
@@ -448,52 +442,23 @@ class WorkflowDialog(NXDialog):
         if self.grid is None:
             raise NeXusError('Need to update status')
         for scan in [s for s in self.enabled_scans if self.any_selected(s)]:
-            for i, entry in enumerate(self.enabled_scans[scan]['entries']):
-                if self.only_combined(scan):
-                    if i == 0:
-                        reduce = NXMultiReduce(scan)
-                        reduce.regular = reduce.mask = False
-                    else:
-                        break
-                else:
-                    reduce = NXReduce(entry, scan, server=self.server)
-                    reduce.regular = reduce.mask = False
-                    if self.selected(scan, 'load'):
-                        reduce.load = True
-                    if self.selected(scan, 'link'):
-                        reduce.link = True
-                    if self.selected(scan, 'copy'):
-                        reduce.copy = True
-                    if self.selected(scan, 'max'):
-                        reduce.maxcount = True
-                    if self.selected(scan, 'find'):
-                        reduce.find = True
-                    if self.selected(scan, 'refine'):
-                        reduce.refine = True
-                    if self.selected(scan, 'prepare'):
-                        reduce.prepare = True
-                    if self.selected(scan, 'transform'):
-                        reduce.transform = True
-                        reduce.regular = True
-                    if self.selected(scan, 'masked_transform'):
-                        reduce.transform = True
-                        reduce.mask = True
-                if self.selected(scan, 'combine'):
-                    reduce.combine = True
-                    reduce.regular = True
-                if self.selected(scan, 'masked_combine'):
-                    reduce.combine = True
-                    reduce.mask = True
-                if self.selected(scan, 'pdf'):
-                    reduce.pdf = True
-                    reduce.regular = True
-                if self.selected(scan, 'masked_pdf'):
-                    reduce.pdf = True
-                    reduce.mask = True
-                if self.selected(scan, 'overwrite'):
-                    reduce.overwrite = True
-                reduce.queue('nxreduce')
-                time.sleep(0.5)
+            reduce = NXMultiReduce(scan, server=self.server)
+            reduce.tasks = []
+            reduce.options = []
+            for task in self.tasks:
+                if task in ['transform', 'combine', 'pdf']:
+                    if 'regular' not in reduce.options:
+                        reduce.options.append('regular')
+                elif 'masked_' in task:
+                    task = task.replace('masked_', '')
+                    if 'mask' not in reduce.options:
+                        reduce.options.append('mask')
+                if self.selected(scan, task) and task not in reduce.tasks:
+                    reduce.tasks.append(task)
+            if self.selected(scan, 'overwrite'):
+                reduce.options.append('overwrite')
+            reduce.queue('nxreduce')
+            time.sleep(0.5)
             for task in self.tasks:
                 if self.selected(scan, task):
                     self.queued(scan, task)
