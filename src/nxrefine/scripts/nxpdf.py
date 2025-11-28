@@ -39,7 +39,7 @@ def main():
                            regular=args.regular, mask=args.mask,
                            overwrite=args.overwrite)
     if args.queue:
-        reduce.queue('nxpdf', args)
+        reduce.queue('nxpdf')
     else:
         if reduce.regular:
             reduce.nxpdf()

@@ -8,7 +8,6 @@
 # -----------------------------------------------------------------------------
 
 import argparse
-import sys
 
 from nxrefine.nxreduce import NXMultiReduce, NXReduce
 
@@ -39,20 +38,28 @@ def main():
     args = parser.parse_args()
 
     if args.entries:
-        entries = args.entries
+        for entry in args.entries:
+            reduce = NXReduce(entry, args.directory, prepare=True,
+                              overwrite=args.overwrite,
+                              monitor_progress=args.monitor)
+            reduce.mask_parameters['threshold_1'] = args.t1
+            reduce.mask_parameters['horizontal_size_1'] = args.h1
+            reduce.mask_parameters['threshold_2'] = args.t2
+            reduce.mask_parameters['horizontal_size_2'] = args.h2
+            if args.queue:
+                reduce.queue('nxprepare')
+            else:
+                reduce.nxprepare()
     else:
-        entries = NXMultiReduce(args.directory).entries
-
-    for entry in entries:
-        reduce = NXReduce(entry, args.directory, prepare=True,
-                          overwrite=args.overwrite,
-                          monitor_progress=args.monitor)
+        reduce = NXMultiReduce(args.directory, prepare=True,
+                               overwrite=args.overwrite,
+                               monitor_progress=args.monitor)
         reduce.mask_parameters['threshold_1'] = args.t1
         reduce.mask_parameters['horizontal_size_1'] = args.h1
         reduce.mask_parameters['threshold_2'] = args.t2
         reduce.mask_parameters['horizontal_size_2'] = args.h2
         if args.queue:
-            reduce.queue('nxprepare', args)
+            reduce.queue('nxprepare')
         else:
             reduce.nxprepare()
 

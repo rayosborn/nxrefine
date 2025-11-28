@@ -30,15 +30,18 @@ def main():
     args = parser.parse_args()
 
     if args.entries:
-        entries = args.entries
+        for entry in args.entries:
+            reduce = NXReduce(entry, args.directory, parent=args.parent,
+                              copy=True, overwrite=args.overwrite)
+            if args.queue:
+                reduce.queue('nxcopy')
+            else:
+                reduce.nxcopy()
     else:
-        entries = NXMultiReduce(args.directory).entries
-
-    for entry in entries:
-        reduce = NXReduce(entry, args.directory, parent=args.parent, copy=True,
-                          overwrite=args.overwrite)
+        reduce = NXMultiReduce(args.directory, copy=True, parent=args.parent,
+                               overwrite=args.overwrite)
         if args.queue:
-            reduce.queue('nxcopy', args)
+            reduce.queue('nxcopy')
         else:
             reduce.nxcopy()
 

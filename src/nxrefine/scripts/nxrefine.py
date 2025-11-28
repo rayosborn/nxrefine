@@ -34,23 +34,30 @@ def main():
     args = parser.parse_args()
 
     if args.entries:
-        entries = args.entries
+        for i, entry in enumerate(args.entries):
+            if i == 0:
+                lattice = args.lattice
+            else:
+                lattice = False
+            reduce = NXReduce(entry, args.directory, refine=True,
+                              lattice=lattice, overwrite=args.overwrite)
+            if args.polar_max:
+                reduce.polar_max = args.polar_max
+            if args.hkl_tolerance:
+                reduce.hkl_tolerance = args.hkl_tolerance
+            if args.queue:
+                reduce.queue('nxrefine', args)
+            else:
+                reduce.nxrefine()
     else:
-        entries = NXMultiReduce(args.directory).entries
-
-    for i, entry in enumerate(entries):
-        if i == 0:
-            lattice = args.lattice
-        else:
-            lattice = False
-        reduce = NXReduce(entry, args.directory, refine=True,
-                          lattice=lattice, overwrite=args.overwrite)
+        reduce = NXMultiReduce(args.directory, refine=True,
+                               overwrite=args.overwrite)
         if args.polar_max:
             reduce.polar_max = args.polar_max
         if args.hkl_tolerance:
             reduce.hkl_tolerance = args.hkl_tolerance
         if args.queue:
-            reduce.queue('nxrefine', args)
+            reduce.queue('nxrefine')
         else:
             reduce.nxrefine()
 

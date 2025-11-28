@@ -52,28 +52,31 @@ def main():
     args = parser.parse_args()
 
     if args.entries:
-        entries = args.entries
-    else:
-        entries = NXMultiReduce(args.directory).entries
-
-    for entry in entries:
-        reduce = NXReduce(entry=entry, directory=args.directory,
-                          load=args.load, link=args.link, maxcount=args.max,
-                          find=args.find, copy=args.copy, refine=args.refine,
-                          prepare=args.prepare, transform=args.transform,
-                          combine=args.combine, pdf=args.pdf,
-                          regular=args.regular, mask=args.mask,
-                          overwrite=args.overwrite)
+        for entry in args.entries:
+            reduce = NXReduce(entry=entry, directory=args.directory,
+                              load=args.load, link=args.link, max=args.max,
+                              find=args.find, copy=args.copy,
+                              refine=args.refine, prepare=args.prepare,
+                              transform=args.transform,
+                              regular=args.regular, mask=args.mask,
+                              overwrite=args.overwrite)
         if args.queue:
-            reduce.queue('nxreduce', args)
+            reduce.queue('nxreduce')
         else:
-            reduce.combine = reduce.pdf = False
             reduce.nxreduce()
-    if (args.combine or args.pdf) and not args.queue:
-        reduce = NXMultiReduce(args.directory, combine=args.combine,
-                               pdf=args.pdf, regular=args.regular,
-                               mask=args.mask, overwrite=args.overwrite)
-        reduce.nxreduce()
+    else:
+        reduce = NXMultiReduce(args.directory, 
+                               load=args.load, link=args.link, max=args.max,
+                               find=args.find, copy=args.copy,
+                               refine=args.refine, prepare=args.prepare,
+                               transform=args.transform,
+                               combine=args.combine, pdf=args.pdf,
+                               regular=args.regular, mask=args.mask,
+                               overwrite=args.overwrite)
+        if args.queue:
+            reduce.queue('nxreduce')
+        else:
+            reduce.nxreduce()
 
 
 if __name__ == "__main__":

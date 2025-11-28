@@ -32,17 +32,22 @@ def main():
     args = parser.parse_args()
 
     if args.entries:
-        entries = args.entries
-    else:
-        entries = NXMultiReduce(args.directory).entries
-
-    for entry in entries:
-        reduce = NXReduce(entry, args.directory, maxcount=True,
-                          first=args.first, last=args.last,
-                          overwrite=args.overwrite,
-                          monitor_progress=args.monitor)
+        for entry in args.entries:
+            reduce = NXReduce(entry, args.directory, max=True,
+                              first=args.first, last=args.last,
+                              overwrite=args.overwrite,
+                              monitor_progress=args.monitor)
         if args.queue:
             reduce.queue('nxmax', args)
+        else:
+            reduce.nxmax()
+    else:
+        reduce = NXMultiReduce(args.directory, max=True,
+                               first=args.first, last=args.last,
+                               overwrite=args.overwrite,
+                               monitor_progress=args.monitor)
+        if args.queue:
+            reduce.queue('nxmax')
         else:
             reduce.nxmax()
 

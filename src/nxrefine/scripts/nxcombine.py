@@ -17,8 +17,6 @@ def main():
     parser = argparse.ArgumentParser(
         description="Combine CCTW transforms")
     parser.add_argument('-d', '--directory', default='', help='scan directory')
-    parser.add_argument('-e', '--entries', nargs='+',
-                        help='names of entries to be combined.')
     parser.add_argument('-R', '--regular', action='store_true',
                         help='combine transforms')
     parser.add_argument('-M', '--mask', action='store_true',
@@ -34,11 +32,11 @@ def main():
                            combine=True, regular=args.regular, mask=args.mask,
                            overwrite=args.overwrite)
     if args.queue:
-        reduce.queue('nxcombine', args)
+        reduce.queue('nxcombine')
     else:
         if reduce.regular:
             reduce.nxcombine()
-        elif reduce.mask:
+        if reduce.mask:
             reduce.nxcombine(mask=True)
 
 

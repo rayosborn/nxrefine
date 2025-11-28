@@ -38,18 +38,27 @@ def main():
 
     if args.entries:
         entries = args.entries
+        for entry in entries:
+            reduce = NXReduce(entry, args.directory, find=True,
+                              parent=args.parent,
+                              threshold=args.threshold,
+                              first=args.first, last=args.last,
+                              min_pixels=args.pixels,
+                              overwrite=args.overwrite,
+                              monitor_progress=args.monitor)
+            if args.queue:
+                reduce.queue('nxfind')
+            else:
+                reduce.nxfind()
     else:
-        entries = NXMultiReduce(args.directory).entries
-
-    for entry in entries:
-        reduce = NXReduce(entry, args.directory, find=True,
-                          threshold=args.threshold,
-                          first=args.first, last=args.last,
-                          min_pixels=args.pixels,
-                          overwrite=args.overwrite,
-                          monitor_progress=args.monitor)
+        reduce = NXMultiReduce(args.directory, find=True, parent=args.parent,
+                               threshold=args.threshold,
+                               first=args.first, last=args.last,
+                               min_pixels=args.pixels,
+                               overwrite=args.overwrite,
+                               monitor_progress=args.monitor)
         if args.queue:
-            reduce.queue('nxfind', args)
+            reduce.queue('nxfind')
         else:
             reduce.nxfind()
 

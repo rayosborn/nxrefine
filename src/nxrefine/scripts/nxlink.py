@@ -28,15 +28,18 @@ def main():
     args = parser.parse_args()
 
     if args.entries:
-        entries = args.entries
+        for entry in args.entries:
+            reduce = NXReduce(entry, args.directory, link=True,
+                              parent=args.parent, overwrite=args.overwrite)
+            if args.queue:
+                reduce.queue('nxlink')
+            else:
+                reduce.nxlink()
     else:
-        entries = NXMultiReduce(args.directory).entries
-
-    for entry in entries:
-        reduce = NXReduce(entry, args.directory, link=True,
-                          overwrite=args.overwrite)
+        reduce = NXMultiReduce(args.directory, link=True, parent=args.parent,
+                              overwrite=args.overwrite)
         if args.queue:
-            reduce.queue('nxlink', args)
+            reduce.queue('nxlink')
         else:
             reduce.nxlink()
 

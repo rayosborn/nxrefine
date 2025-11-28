@@ -34,22 +34,23 @@ def main():
     args = parser.parse_args()
 
     if args.entries:
-        entries = args.entries
-    else:
-        entries = NXMultiReduce(args.directory).entries
-
-    for entry in entries:
-        reduce = NXReduce(
-            entry, args.directory, transform=True,
-            Qh=args.qh, Qk=args.qk, Ql=args.ql,
-            regular=args.regular, mask=args.mask, overwrite=args.overwrite)
+        for entry in args.entries:
+            reduce = NXReduce(entry, args.directory, transform=True,
+                              Qh=args.qh, Qk=args.qk, Ql=args.ql,
+                              regular=args.regular, mask=args.mask,
+                              overwrite=args.overwrite)
         if args.queue:
-            reduce.queue('nxtransform', args)
+            reduce.queue('nxtransform')
         else:
             if reduce.regular:
                 reduce.nxtransform()
             if reduce.mask:
                 reduce.nxtransform(mask=True)
+    else:
+        reduce = NXMultiReduce(args.directory, transform=True,
+                               Qh=args.qh, Qk=args.qk, Ql=args.ql,
+                               regular=args.regular, mask=args.mask,
+                               overwrite=args.overwrite)
 
 
 if __name__ == "__main__":
