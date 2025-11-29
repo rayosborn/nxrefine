@@ -446,15 +446,16 @@ class WorkflowDialog(NXDialog):
             reduce.tasks = []
             reduce.options = []
             for task in self.tasks:
-                if task in ['transform', 'combine', 'pdf']:
-                    if 'regular' not in reduce.options:
-                        reduce.options.append('regular')
-                elif 'masked_' in task:
-                    task = task.replace('masked_', '')
-                    if 'mask' not in reduce.options:
-                        reduce.options.append('mask')
-                if self.selected(scan, task) and task not in reduce.tasks:
-                    reduce.tasks.append(task)
+                if self.selected(scan, task):
+                    if task in ['transform', 'combine', 'pdf']:
+                        if 'regular' not in reduce.options:
+                            reduce.options.append('regular')
+                    elif 'masked_' in task:
+                        task = task.replace('masked_', '')
+                        if 'mask' not in reduce.options:
+                            reduce.options.append('mask')
+                    if task not in reduce.tasks:
+                        reduce.tasks.append(task)
             if self.selected(scan, 'overwrite'):
                 reduce.options.append('overwrite')
             reduce.queue('nxreduce')

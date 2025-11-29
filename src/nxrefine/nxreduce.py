@@ -2742,6 +2742,7 @@ class NXMultiReduce(NXReduce):
                 reduce = NXReduce(entry, self.directory, **self.kwargs)
                 reduce.tasks = [t for t in self.tasks
                                 if t in self.single_tasks]
+                reduce.options = self.options
                 reduce.queue_tasks()
         if any(t in self.tasks for t in self.multi_tasks):
             self.queue_tasks()
