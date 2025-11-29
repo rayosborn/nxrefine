@@ -331,6 +331,10 @@ class NXServer(NXDaemon):
         self.concurrent = self.settings.get('server', 'concurrent')
         self.run_command = self.settings.get('server', 'run_command')
         self.template = self.settings.get('server', 'template')
+        if Path(self.template).expanduser().exists():
+            self.template = Path(self.template).expanduser()
+        else:
+            self.template = self.directory / self.template
         self.server_log = self.directory / 'nxserver.log'
         self.pid_file = self.directory / 'nxserver.pid'
         self.queue_directory = self.directory / 'task_list'
