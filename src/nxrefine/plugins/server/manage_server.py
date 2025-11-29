@@ -172,20 +172,22 @@ class ServerDialog(NXDialog):
         patterns = ['nxcombine', 'nxcopy', 'nxfind', 'nxlink', 'nxmax',
                     'nxpdf', 'nxprepare', 'nxreduce', 'nxrefine', 'nxsum',
                     'nxtransform']
-        if self.server.run_command:
-            if self.server.run_command.startswith('pdsh'):
-                command = (f"pdsh -w {','.join(self.server.cpus)} 'ps -f' | "
-                           f"grep -e {' -e '.join(patterns)}")
-        elif self.server_type == 'multicore' or self.server_type is None :
+        if self.server_type == 'multicore' or self.server_type is None :
             command = f"ps auxww | grep -e {' -e '.join(patterns)}"
+        elif self.server.directory.joinpath('nxqstat.sh').exists():
+            command = f'bash {self.server.directory.joinpath("nxqstat.sh")}'
+        else:
+            self.text_box.setPlainText("Not available for this server type")
+            return
         process = subprocess.run(command, shell=True, stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE)
         if process.returncode == 0:
-            lines = [line for line in sorted(
-                process.stdout.decode().split('\n')) if line]
-            lines = [line[line.index('nx'):]
-                     for line in lines if 'grep' not in line]
-            text = '\n'.join(set(lines))
+            # lines = [line for line in sorted(
+            #     process.stdout.decode().split('\n')) if line]
+            # lines = [line[line.index('nx'):]
+            #          for line in lines if 'grep' not in line]
+            # text = '\n'.join(set(lines))
+            text = process.stdout.decode()
         else:
             text = process.stderr.decode()
         if text != self.current_text:
