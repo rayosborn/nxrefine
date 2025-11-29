@@ -110,7 +110,6 @@ class PrepareDialog(NXDialog):
                                first=self.first, last=self.last,
                                overwrite=True, gui=True)
         self.reduce.mask_parameters['threshold_1'] = self.threshold1
-        self.reduce.mask_parameters['threshold_1'] = self.threshold1
         self.reduce.mask_parameters['horizontal_size_1'] = self.horizontal1
         self.reduce.mask_parameters['threshold_2'] = self.threshold2
         self.reduce.mask_parameters['horizontal_size_2'] = self.horizontal2
