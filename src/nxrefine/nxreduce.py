@@ -206,8 +206,8 @@ class NXReduce(QtCore.QObject):
         self._radius = radius
         if mask_parameters is None:
             self.mask_parameters = {
-                'threshold_1': 2, 'horizontal_size_1': 11,
-                'threshold_2': 0.8, 'horizontal_size_2': 51}
+                'threshold_1': 1.0, 'horizontal_size_1': 11,
+                'threshold_2': 0.6, 'horizontal_size_2': 51}
         else:
             self.mask_parameters = mask_parameters
 
@@ -2171,6 +2171,7 @@ class NXMultiReduce(NXReduce):
 
         super().__init__(entry=entry, directory=directory, entries=entries,
                          **kwargs)
+        self.kwargs = kwargs
 
         self.refine = NXRefine(self.root)
         if laue:
@@ -2715,10 +2716,9 @@ class NXMultiReduce(NXReduce):
         """
         if any(s in self.tasks for s in self.single_tasks):
             for entry in self.entries:
-                reduce = NXReduce(entry, self.directory)
+                reduce = NXReduce(entry, self.directory, **self.kwargs)
                 reduce.tasks = [t for t in self.tasks
                                 if t not in self.multi_tasks]
-                reduce.options = self.options
                 reduce.nxreduce()
         if 'combine' in self.tasks:
             if 'regular' in self.options:
@@ -2739,10 +2739,9 @@ class NXMultiReduce(NXReduce):
             return
         if any(t in self.tasks for t in self.single_tasks):
             for entry in self.entries:
-                reduce = NXReduce(entry, self.directory)
+                reduce = NXReduce(entry, self.directory, **self.kwargs)
                 reduce.tasks = [t for t in self.tasks
                                 if t in self.single_tasks]
-                reduce.options = self.options
                 reduce.queue_tasks()
         if any(t in self.tasks for t in self.multi_tasks):
             self.queue_tasks()
