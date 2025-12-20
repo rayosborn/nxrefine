@@ -239,8 +239,8 @@ def local_sum_same(X, K, padding):
 
 
 def mask_volume(data_file, data_path, mask_file, mask_path, i, j, k,
-                pixel_mask, threshold_1=2, horiz_size_1=11,
-                threshold_2=0.8, horiz_size_2=51):
+                pixel_mask, threshold_1=1, horiz_size_1=11,
+                threshold_2=0.6, horiz_size_2=51):
     """Generate a 3D mask around Bragg peaks.
 
     Parameters

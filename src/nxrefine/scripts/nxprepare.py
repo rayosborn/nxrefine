@@ -20,11 +20,11 @@ def main():
                         help='scan directory')
     parser.add_argument('-e', '--entries', nargs='+',
                         help='names of entries to be processed')
-    parser.add_argument('--t1', type=float, default=2,
+    parser.add_argument('--t1', type=float, default=1,
                         help='threshold for smaller convolution')
     parser.add_argument('--h1', type=int, default=11,
                         help='size of smaller convolution')
-    parser.add_argument('--t2', type=float, default=0.8,
+    parser.add_argument('--t2', type=float, default=0.6,
                         help='threshold for larger convolution')
     parser.add_argument('--h2', type=int, default=51,
                         help='size of larger convolution')
@@ -37,27 +37,27 @@ def main():
 
     args = parser.parse_args()
 
+    mask_parameters = {}
+    mask_parameters['threshold_1'] = args.t1
+    mask_parameters['horizontal_size_1'] = args.h1
+    mask_parameters['threshold_2'] = args.t2
+    mask_parameters['horizontal_size_2'] = args.h2
+
     if args.entries:
         for entry in args.entries:
             reduce = NXReduce(entry, args.directory, prepare=True,
+                              mask_parameters=mask_parameters,
                               overwrite=args.overwrite,
                               monitor_progress=args.monitor)
-            reduce.mask_parameters['threshold_1'] = args.t1
-            reduce.mask_parameters['horizontal_size_1'] = args.h1
-            reduce.mask_parameters['threshold_2'] = args.t2
-            reduce.mask_parameters['horizontal_size_2'] = args.h2
             if args.queue:
                 reduce.queue('nxprepare')
             else:
                 reduce.nxprepare()
     else:
         reduce = NXMultiReduce(args.directory, prepare=True,
+                               mask_parameters=mask_parameters,
                                overwrite=args.overwrite,
                                monitor_progress=args.monitor)
-        reduce.mask_parameters['threshold_1'] = args.t1
-        reduce.mask_parameters['horizontal_size_1'] = args.h1
-        reduce.mask_parameters['threshold_2'] = args.t2
-        reduce.mask_parameters['horizontal_size_2'] = args.h2
         if args.queue:
             reduce.queue('nxprepare')
         else:
