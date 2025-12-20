@@ -7,7 +7,6 @@
 # -----------------------------------------------------------------------------
 
 import logging
-import logging.handlers
 import operator
 import os
 import platform
@@ -134,12 +133,6 @@ class NXReduce(QtCore.QObject):
 
         super(NXReduce, self).__init__()
 
-        self.single_tasks = ['load', 'link', 'copy', 'max', 'find', 'refine',
-                             'prepare', 'transform']
-        self.multi_tasks = ['combine', 'pdf']
-        self.all_tasks = self.single_tasks + self.multi_tasks
-        self.initialize_tasks(kwargs)
-
         if isinstance(entry, NXentry):
             self.entry_name = entry.nxname
             self.wrapper_file = entry.nxfilename
@@ -191,6 +184,8 @@ class NXReduce(QtCore.QObject):
         self._parent_entry = None
         self._entries = entries
         self._mode = 'r'
+
+        self.initialize_tasks(kwargs)
 
         self._threshold = threshold
         self._min_pixels = min_pixels
@@ -269,6 +264,10 @@ class NXReduce(QtCore.QObject):
             and options to be performed.
         """
         self.tasks = []
+        self.single_tasks = ['load', 'link', 'copy', 'max', 'find', 'refine',
+                             'prepare', 'transform']
+        self.multi_tasks = ['combine', 'pdf']
+        self.all_tasks = self.single_tasks + self.multi_tasks
         for task in self.all_tasks:
             if kwargs.get(task, False):
                 self.tasks.append(task)
