@@ -30,7 +30,7 @@ class NXSettings(ConfigParser):
                          'phi': -5.0, 'phi_end': 360.0, 'phi_step': 0.1,
                          'chi': 0.0, 'omega': 0.0, 'theta': 0.0,
                          'x': 0.0, 'y': 0.0,
-                         'nsteps': 3, 'frame_rate': 10},
+                         'frame_rate': 10},
             'nxreduce': {'threshold': 50000, 'min_pixels': 10,
                          'first': 10, 'last': 3640,
                          'polar_max': 10.0, 'hkl_tolerance': 0.05,
