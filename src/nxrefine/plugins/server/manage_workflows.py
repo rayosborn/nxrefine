@@ -6,7 +6,7 @@
 # The full license is in the file LICENSE.pdf, distributed with this software.
 # -----------------------------------------------------------------------------
 
-import os
+from pathlib import Path
 import subprocess
 import time
 
@@ -46,6 +46,9 @@ class WorkflowDialog(NXDialog):
         self.entries = ['f1', 'f2', 'f3']
         self.server = None
 
+    def __repr__(self):
+        return f"WorkflowDialog('{self.sample_directory}')"
+
     def choose_directory(self):
         super().choose_directory()
         if self.layout.count() == 2:
@@ -57,24 +60,22 @@ class WorkflowDialog(NXDialog):
                 ('Sync Database', self.sync_db)))
         if self.scroll_area is None:
             self.add_grid_headers()
-        self.sample_directory = self.get_directory()
-        self.sample = os.path.basename(os.path.dirname(self.sample_directory))
-        self.label = os.path.join(os.path.basename(self.sample_directory))
-        parent_file = os.path.join(self.sample_directory,
-                                   self.sample+'_parent.nxs')
-        if os.path.exists(parent_file):
-            self.parent_file = os.path.realpath(parent_file)
-            self.filename.setText(os.path.basename(self.parent_file))
+        self.sample_directory = Path(self.get_directory())
+        self.sample = self.sample_directory.parent.name
+        self.label = self.sample_directory.name
+        parent_file = self.sample_directory / (self.sample+'_parent.nxs')
+        if parent_file.exists():
+            self.parent_file = parent_file.resolve()
+            self.filename.setText(self.parent_file.name)
         else:
             self.parent_file = None
             self.filename.setText('')
-        self.root_directory = os.path.dirname(
-            os.path.dirname(self.sample_directory))
-        self.mainwindow.default_directory = self.sample_directory
-        self.task_directory = os.path.join(self.root_directory, 'tasks')
-        if not os.path.exists(self.task_directory):
-            os.mkdir(self.task_directory)
-        db_file = os.path.join(self.task_directory, 'nxdatabase.db')
+        self.root_directory = self.sample_directory.parent.parent
+        self.mainwindow.default_directory = str(self.sample_directory)
+        self.task_directory = self.root_directory / 'tasks'
+        if not self.task_directory.exists():
+            self.task_directory.mkdir()
+        db_file = self.task_directory / 'nxdatabase.db'
         self.db = NXDatabase(db_file)
         if self.server is None:
             self.server = NXServer()
@@ -113,26 +114,25 @@ class WorkflowDialog(NXDialog):
         self.make_parent()
 
     def get_scan(self, filename):
-        _base = os.path.basename(os.path.splitext(filename)[0])
+        _base = Path(filename).stem
         _scan = _base.replace(self.sample+'_', '')
-        return os.path.join(self.sample_directory, _scan)
+        return self.sample_directory / _scan
 
     def get_scan_file(self, scan):
-        return os.path.join(self.sample_directory,
-                            self.sample+'_'+os.path.basename(scan)+'.nxs')
+        return self.sample_directory / (self.sample+'_'+Path(scan).name+'.nxs')
 
     def make_parent(self):
         reduce = NXMultiReduce(self.get_scan(self.get_filename()),
                                overwrite=True)
         reduce.make_parent()
-        self.parent_file = reduce.wrapper_file
-        self.filename.setText(os.path.basename(self.parent_file))
+        self.parent_file = Path(reduce.wrapper_file)
+        self.filename.setText(self.parent_file.name)
         self.update()
 
     def is_valid(self, wrapper_file):
         if not wrapper_file.endswith('.nxs'):
             return False
-        elif not os.path.basename(wrapper_file).startswith(self.sample):
+        elif not wrapper_file.startswith(self.sample):
             return False
         elif '_parent' in wrapper_file or '_mask' in wrapper_file:
             return False
@@ -152,10 +152,10 @@ class WorkflowDialog(NXDialog):
             self.scroll_area.deleteLater()
 
         # Map from wrapper files to scan directories
-        wrapper_files = {w: self.get_scan(w) for w in sorted([
-            os.path.join(self.sample_directory, filename)
-            for filename in os.listdir(self.sample_directory)
-            if self.is_valid(filename)], key=natural_sort)}
+        files = [f.name for f in self.sample_directory.iterdir()
+                 if self.is_valid(f.name)]
+        wrapper_files = {self.sample_directory / f: self.get_scan(f)
+                         for f in sorted(files, key=natural_sort)}
         self.grid = QtWidgets.QGridLayout()
         self.grid_widget = NXWidget()
         self.grid_widget.set_layout(self.grid, 'stretch')
@@ -170,7 +170,7 @@ class WorkflowDialog(NXDialog):
         row = 0
         # Create (unchecked) checkboxes
         for wrapper_file, scan in wrapper_files.items():
-            scan_label = os.path.basename(scan)
+            scan_label = scan.name
             status = {}
             status['scan'] = NXLabel(scan_label)
             if self.parent_file == wrapper_file:
@@ -505,7 +505,7 @@ class WorkflowDialog(NXDialog):
         dialog = NXDialog(parent=self)
         dialog.setMinimumWidth(800)
         dialog.setMinimumHeight(600)
-        scans = [os.path.basename(scan) for scan in self.scans]
+        scans = [scan.name for scan in self.scans]
         self.scan_combo = dialog.select_box(scans, slot=self.choose_scan)
         self.entry_combo = dialog.select_box(self.entries,
                                              slot=self.refreshview)
@@ -529,14 +529,14 @@ class WorkflowDialog(NXDialog):
                                   ('View Workflow Logs', self.logview),
                                   ('View Workflow Output', self.outview),
                                   ('View Database', self.databaseview)),
-            close_layout)
-        scans = os.path.join(self.label, self.sample)
-        dialog.setWindowTitle(f"'{scans}' Logs")
+            close_layout)        
+        dialog.setWindowTitle(
+            f"{'/'.join(self.sample_directory.parts[-3:])} Logs")
         self.view_dialog = dialog
         self.view_dialog.show()
 
     def choose_scan(self):
-        scan = os.path.join(self.sample_directory, self.scan_combo.selected)
+        scan = self.sample_directory / self.scan_combo.selected
         current_entry = self.entry_combo.selected
         self.entry_combo.clear()
         self.entry_combo.add(*self.scans[scan]['entries'])
@@ -549,15 +549,15 @@ class WorkflowDialog(NXDialog):
     def dataview(self):
         self.defaultview = self.dataview
         scan = self.scan_combo.currentText()
-        scan_directory = os.path.join(self.sample_directory, scan)
-        if not os.path.exists(scan_directory):
+        scan_directory = self.sample_directory / scan
+        if not scan_directory.exists():
             self.output_box.setPlainText('Directory has not been created')
             return
         text = []
 
         def _getmtime(entry):
             return entry.stat().st_mtime
-        for f in sorted(os.scandir(scan_directory), key=_getmtime):
+        for f in sorted(scan_directory.iterdir(), key=_getmtime):
             text.append('{0}   {1}   {2}'.format(
                 format_mtime(f.stat().st_mtime),
                 human_size(f.stat().st_size, width=6),
@@ -569,8 +569,8 @@ class WorkflowDialog(NXDialog):
 
     def serverview(self):
         self.defaultview = self.serverview
-        scan = os.path.join(self.sample, self.label,
-                            self.scan_combo.currentText())
+        scan = str(Path(self.sample) / self.label /
+                   self.scan_combo.currentText())
         with open(self.server.server_log) as f:
             lines = f.readlines()
         text = [line for line in lines if scan in line]
@@ -583,12 +583,12 @@ class WorkflowDialog(NXDialog):
 
     def logview(self):
         self.defaultview = self.logview
-        scan = os.path.join(self.label,
-                            self.sample + '_' + self.scan_combo.currentText())
+        scan = str(Path(self.label) /
+                   (self.sample + '_' + self.scan_combo.currentText()))
         entry = self.entry_combo.currentText()
         prefix = scan + "['" + entry + "']: "
         alternate_prefix = scan + "['entry']: "
-        with open(os.path.join(self.task_directory, 'nxlogger.log')) as f:
+        with open(self.task_directory / 'nxlogger.log') as f:
             lines = f.readlines()
         text = [line.replace(prefix, '').replace(alternate_prefix, '')
                 for line in lines if scan in line
@@ -608,7 +608,7 @@ class WorkflowDialog(NXDialog):
         if (task == 'nxcombine' or task == 'nxmasked_combine' or
                 task == 'nxpdf'):
             entry = 'entry'
-        wrapper_file = os.path.join(self.sample_directory, scan+'.nxs')
+        wrapper_file = self.sample_directory / (scan+'.nxs')
         root = nxload(wrapper_file)
         if task in root[entry]:
             text = 'Date: ' + root[entry][task]['date'].nxvalue + '\n'
@@ -621,7 +621,7 @@ class WorkflowDialog(NXDialog):
         self.defaultview = self.databaseview
         scan = self.sample + '_' + self.scan_combo.currentText()
         task = 'nx' + self.task_combo.currentText()
-        wrapper_file = os.path.join(self.sample_directory, scan+'.nxs')
+        wrapper_file = self.sample_directory / (scan+'.nxs')
         f = self.db.get_file(wrapper_file)
         text = [' '.join([t.name, str(t.entry), str(t.status),
                           str(t.queue_time), str(t.start_time),
@@ -654,8 +654,8 @@ class WorkflowDialog(NXDialog):
 
     def cpuview(self):
         cpu = self.cpu_combo.selected
-        cpu_log = os.path.join(self.server.directory, f'{cpu}.log')
-        if os.path.exists(cpu_log):
+        cpu_log = self.server.directory / f'{cpu}.log'
+        if cpu_log.exists():
             with open(cpu_log) as f:
                 lines = f.readlines()
             self.output_box.setPlainText(''.join(lines))

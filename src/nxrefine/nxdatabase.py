@@ -126,7 +126,7 @@ class NXDatabase:
 
         Parameters
         ----------
-        db_file : str
+        db_file : str or Path
             Path to the database file
         echo : bool, optional
             True if SQL statements are echoed to `stdout`, by default False.
@@ -172,7 +172,7 @@ class NXDatabase:
 
         Parameters
         ----------
-        filename : str
+        filename : str or Path
             Path of wrapper file.
 
         Returns

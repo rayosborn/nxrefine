@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Copyright (c) 2022, Argonne National Laboratory.
+# Copyright (c) 2025, Argonne National Laboratory.
 #
 # Distributed under the terms of an Open Source License.
 #
@@ -8,7 +8,6 @@
 
 import logging
 import logging.handlers
-import os
 import pickle
 import struct
 from pathlib import Path
@@ -71,12 +70,11 @@ class NXLogger(ThreadingTCPServer, NXDaemon):
                  port=logging.handlers.DEFAULT_TCP_LOGGING_PORT,
                  handler=LogRecordStreamHandler):
         self.pid_name = 'nxlogger'
-        self.directory = directory
-        self.task_directory = Path(directory) / 'tasks'
-        if self.task_directory.exists():
-            os.mkdir(self.task_directory)
-        self.log_file = os.path.join(self.task_directory, 'nxlogger.log')
-        self.pid_file = os.path.join(self.task_directory, 'nxlogger.pid')
+        self.directory = Path(directory)
+        self.task_directory = self.directory.joinpath('tasks')
+        self.task_directory.mkdir(exist_ok=True)
+        self.log_file = self.task_directory.joinpath('nxlogger.log')
+        self.pid_file = self.task_directory.joinpath('nxlogger.pid')
         NXDaemon.__init__(self, self.pid_name, self.pid_file)
 
         self.host = host

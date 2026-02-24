@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Copyright (c) 2022, Argonne National Laboratory.
+# Copyright (c) 2025, Argonne National Laboratory.
 #
 # Distributed under the terms of an Open Source License.
 #
@@ -113,7 +113,7 @@ class NXController(Thread):
         self.controller_queue = controller_queue
         self.server = server
         self.server_log = self.server.server_log
-        self.cpu_file = Path(self.server_log).parent.joinpath('last_cpu')
+        self.cpu_file = self.server_log.parent.joinpath('last_cpu')
 
     def __repr__(self):
         return f"NXController(pid={os.getpid()})"
@@ -159,7 +159,7 @@ class NXController(Thread):
 
     @property
     def cpu_logs(self):
-        log_files = [Path(self.server_log).parent.joinpath(cpu+'.log')
+        log_files = [self.server_log.parent.joinpath(cpu+'.log')
                      for cpu in self.server.cpus]
         return [log_file for log_file in log_files if log_file.exists()]
 
@@ -179,7 +179,7 @@ class NXWorker(Thread):
         self.worker_queue = worker_queue
         self.server_log = server_log
         cpu_log = self.cpu + '.log'
-        self.cpu_log = Path(self.server_log).parent / cpu_log
+        self.cpu_log = self.server_log.parent / cpu_log
 
     def __repr__(self):
         return f"NXWorker(cpu='{self.cpu}')"

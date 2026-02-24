@@ -144,9 +144,9 @@ class ServerDialog(NXDialog):
         self.reset_buttons()
         self.pushbutton['Server Log'].setChecked(True)
         self.log_combo.setEnabled(True)
-        log_file = Path(self.server.directory).joinpath(
+        log_file = self.server.directory.joinpath(
             f'{self.log_combo.selected}.log')
-        if Path(log_file).exists():
+        if log_file.exists():
             with open(log_file) as f:
                 text = f.read()
         else:

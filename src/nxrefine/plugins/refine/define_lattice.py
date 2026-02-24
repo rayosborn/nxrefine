@@ -6,7 +6,7 @@
 # The full license is in the file LICENSE.pdf, distributed with this software.
 # -----------------------------------------------------------------------------
 
-import os
+from pathlib import Path
 
 from nexpy.gui.dialogs import GridParameters, NXDialog
 from nexpy.gui.pyqt import getOpenFileName
@@ -80,7 +80,7 @@ class LatticeDialog(NXDialog):
         import gemmi
         import gemmi.cif as cif
         filename = getOpenFileName(self, 'Open CIF File')
-        if os.path.exists(filename):
+        if Path(filename).is_file():
             cif_doc = cif.read_file(filename)
             found_block = False
             for cif_block in cif_doc:
