@@ -1921,7 +1921,7 @@ class NXRefine:
         if 'polarization' in self.entry['instrument/detector']:
             return self.entry['instrument/detector/polarization'].nxvalue
         elif 'calibration' in self.entry['instrument']:
-            from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
+            from pyFAI.integrator.azimuthal import AzimuthalIntegrator
             parameters = (
                 self.entry['instrument/calibration/refinement/parameters'])
             ai = AzimuthalIntegrator(

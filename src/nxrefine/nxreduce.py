@@ -1274,7 +1274,7 @@ class NXReduce(QtCore.QObject):
         correction, and the polarization factor is also applied.
         """
         try:
-            from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
+            from pyFAI.integrator.azimuthal import AzimuthalIntegrator
             parameters = (
                 self.entry['instrument/calibration/refinement/parameters'])
             ai = AzimuthalIntegrator(
