@@ -29,6 +29,7 @@ keywords = [
     "data analysis",
     "visualization",
 ]
+
 requires-python = ">=3.10"
 dependencies = [
     "nexpy >= 2.0.0",
@@ -41,6 +42,11 @@ dependencies = [
     "psutil",
     "scikit-image",
     "xtec",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "pyopencl",
 ]
 
 [project.urls]
