@@ -7,6 +7,7 @@
 # -----------------------------------------------------------------------------
 
 import os
+from pathlib import Path
 
 from nexpy.gui.pyqt import getSaveFileName
 from nexpy.gui.utils import natural_sort, report_error
@@ -49,19 +50,20 @@ class SumDialog(NXDialog):
 
     def choose_sample(self):
         super().choose_directory()
-        self.sample_directory = self.get_directory()
-        self.experiment_directory = os.path.dirname(
-            os.path.dirname(self.sample_directory))
-        self.sample = os.path.basename(os.path.dirname(self.sample_directory))
+        self.sample_directory = Path(self.get_directory())
+        self.experiment_directory = self.sample_directory.parent.parent
+        self.sample = self.sample_directory.parent.name
         self.setup_scans()
 
     def setup_scans(self):
         scans = []
-        all_files = [self.sample+'_'+d+'.nxs'
-                     for d in os.listdir(self.sample_directory)
-                     if os.path.isdir(os.path.join(self.sample_directory, d))]
-        filenames = sorted([f for f in all_files if os.path.exists(
-            os.path.join(self.sample_directory, f))], key=natural_sort)
+        all_files = [
+            f'{self.sample}_{d.name}.nxs'
+            for d in self.sample_directory.iterdir() if d.is_dir()
+        ]
+        filenames = sorted(
+            [f for f in all_files if (self.sample_directory / f).exists()],
+            key=natural_sort)
         for i, f in enumerate(filenames):
             scan = f'f{i}'
             scans.append((scan, f, False))
@@ -92,7 +94,7 @@ class SumDialog(NXDialog):
         scans = []
         for scan in self.scan_boxes:
             if self.checkbox[scan].isChecked():
-                base_name = os.path.splitext(self.checkbox[scan].text())[0]
+                base_name = Path(self.checkbox[scan].text()).stem
                 scans.append(base_name.replace(self.sample+'_', ''))
         return scans
 
@@ -113,8 +115,8 @@ class SumDialog(NXDialog):
         return self.checkbox['update'].isChecked()
 
     def get_label(self, scan_file):
-        base_name = os.path.basename(os.path.splitext(scan_file)[0])
-        return base_name.replace(self.sample+'_', '')
+        base_name = Path(scan_file).stem
+        return base_name.replace(f'{self.sample}_', '')
 
     def select_scans(self):
         for scan in self.scan_boxes:
@@ -130,17 +132,16 @@ class SumDialog(NXDialog):
         server = NXServer()
         scan_filter = ';;'.join(("NeXus Files (*.nxs)", "Any Files (*.* *)"))
         scan_prefix = self.scan_files[0][:self.scan_files[0].rindex('_')]
-        preferred_name = os.path.join(self.sample_directory,
-                                      scan_prefix+'_sum.nxs')
+        preferred_name = self.sample_directory / (scan_prefix + '_sum.nxs')
         scan_file = getSaveFileName(self, 'Choose Summed File Name',
-                                    preferred_name, scan_filter)
+                                    str(preferred_name), scan_filter)
         if not scan_file:
             return
         prefix = self.sample + '_'
-        if not os.path.basename(scan_file).startswith(prefix):
+        if not Path(scan_file).name.startswith(prefix):
             raise NeXusError(f"Summed file name must start with '{prefix}'")
         self.scan_label = self.get_label(scan_file)
-        scan_dir = os.path.join(self.sample_directory, self.scan_label)
+        scan_dir = self.sample_directory / self.scan_label
         reduce = NXMultiReduce(directory=scan_dir, overwrite=True)
         reduce.nxsum(self.scan_list)
         self.treeview.tree.load(scan_file, 'rw')

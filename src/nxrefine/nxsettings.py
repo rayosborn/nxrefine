@@ -88,7 +88,7 @@ class NXSettings(ConfigParser):
     def make_file(self):
         if self.file.exists():
             return
-        Path(self.file.parent).mkdir(parents=True, exist_ok=True)
+        self.file.parent.mkdir(parents=True, exist_ok=True)
         if self.server:
             self.set_defaults()
             self.save()

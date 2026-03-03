@@ -1,13 +1,13 @@
 # -----------------------------------------------------------------------------
-# Copyright (c) 2022, Argonne National Laboratory.
+# Copyright (c) 2025, Argonne National Laboratory.
 #
 # Distributed under the terms of an Open Source License.
 #
 # The full license is in the file LICENSE.pdf, distributed with this software.
 # -----------------------------------------------------------------------------
 
-import os
 import tempfile
+from pathlib import Path
 
 import numpy as np
 from nexusformat.nexus import nxopen, nxsetconfig
@@ -87,7 +87,7 @@ def cubic2(data):
 def symmetrize_entries(symm_function, data_type, data_file, data_path):
     nxsetconfig(lock=3600, lockexpiry=28800)
     with nxopen(data_file, 'r') as data_root:
-        data_path = os.path.basename(data_path)
+        data_path = Path(data_path).name
         for i, entry in enumerate([e for e in data_root if e[-1].isdigit()]):
             data_size = int(
                 data_root[entry][data_path].nxsignal.nbytes / 1e6) + 1000
@@ -170,7 +170,7 @@ class NXSymmetry:
                     signal = result_root['data'].nxvalue
                 else:
                     weights = result_root['data'].nxvalue
-            os.remove(result_file)
+            Path(result_file).unlink()
         with np.errstate(divide='ignore', invalid='ignore'):
             result = np.where(weights > 0, signal / weights, 0.0)
         return result

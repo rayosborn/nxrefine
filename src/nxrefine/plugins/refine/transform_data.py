@@ -6,7 +6,7 @@
 # The full license is in the file LICENSE.pdf, distributed with this software.
 # -----------------------------------------------------------------------------
 
-import os
+from pathlib import Path
 
 import numpy as np
 from nexpy.gui.dialogs import NXDialog
@@ -109,18 +109,16 @@ class TransformDialog(NXDialog):
     def get_output_file(self, mask=False, entry=None):
         if entry is None:
             entry = self.entry
+        base = Path(entry.data.nxsignal.nxfilename).with_suffix('')
         if mask:
-            return os.path.splitext(
-                entry.data.nxsignal.nxfilename)[0] + '_masked_transform.nxs'
-        else:
-            return os.path.splitext(
-                entry.data.nxsignal.nxfilename)[0] + '_transform.nxs'
+            return f'{base}_masked_transform.nxs'
+        return f'{base}_transform.nxs'
 
     def get_settings_file(self, entry=None):
         if entry is None:
             entry = self.entry
-        return os.path.splitext(
-            entry.data.nxsignal.nxfilename)[0] + '_transform.pars'
+        base = Path(entry.data.nxsignal.nxfilename).with_suffix('')
+        return f'{base}_transform.pars'
 
     def get_parameters(self, Q):
         stop, step = float(self.Qbox[Q].text()), float(self.dQbox[Q].text())

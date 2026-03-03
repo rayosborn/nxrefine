@@ -18,9 +18,9 @@ from nexpy.gui.utils import (confirm_action, display_message, load_image,
                              report_error)
 from nexusformat.nexus import (NeXusError, NXdata, NXfield, NXparameters,
                                NXprocess)
-from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from pyFAI.calibrant import ALL_CALIBRANTS
 from pyFAI.geometryRefinement import GeometryRefinement
+from pyFAI.integrator.azimuthal import AzimuthalIntegrator
 from pyFAI.massif import Massif
 
 from nxrefine.nxutils import NXExecutor, as_completed, detector_flipped

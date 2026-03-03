@@ -9,6 +9,7 @@
 import os
 import platform
 import sys
+from pathlib import Path
 
 import psutil
 
@@ -20,7 +21,7 @@ class NXDaemon:
 
     def __init__(self, pid_name, pid_file):
         self.pid_name = pid_name
-        self.pid_file = pid_file
+        self.pid_file = Path(pid_file)
         self.pid_node = platform.node()
 
     def daemonize(self):
@@ -124,8 +125,8 @@ class NXDaemon:
             print(f"'{self.pid_name}' running on {node}")
             return
 
-        if os.path.exists(self.pid_file):
-            os.remove(self.pid_file)
+        if self.pid_file.exists():
+            self.pid_file.unlink()
 
         if pid is None:
             return

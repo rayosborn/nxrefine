@@ -85,7 +85,7 @@ class NXBeamLine:
     def __init__(self, reduce=None, directory=None, *args, **kwargs):
         self.reduce = reduce
         if self.reduce:
-            self.directory = Path(self.reduce.directory)
+            self.directory = self.reduce.directory
             self.base_directory = self.directory.parent
             self.root = self.reduce.root
             self.entry = self.reduce.entry

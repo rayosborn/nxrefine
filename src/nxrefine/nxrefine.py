@@ -1,12 +1,12 @@
 # -----------------------------------------------------------------------------
-# Copyright (c) 2022, Argonne National Laboratory.
+# Copyright (c) 2025, Argonne National Laboratory.
 #
 # Distributed under the terms of an Open Source License.
 #
 # The full license is in the file LICENSE.pdf, distributed with this software.
 # -----------------------------------------------------------------------------
 
-import os
+from pathlib import Path
 
 import gemmi
 import numpy as np
@@ -864,11 +864,10 @@ class NXRefine:
             name = entry + '_masked_transform'
         else:
             name = entry + '_transform'
-        dir = os.path.dirname(self.entry['data'].nxsignal.nxfilename)
+        dir = Path(self.entry['data'].nxsignal.nxfilename).parent
         filename = self.entry.nxfilename
-        parfile = os.path.join(dir, entry+'_transform.pars')
-        command = ['cctw transform']
-        command.append(f'--parameters {parfile}')
+        parfile = dir.joinpath(entry+'_transform.pars')
+        command = [f'cctw transform --script {parfile}']
         if 'pixel_mask' in self.entry['instrument/detector']:
             command.append(
                 fr'--mask {filename}\#/{entry}/instrument/detector/pixel_mask')
@@ -1922,7 +1921,7 @@ class NXRefine:
         if 'polarization' in self.entry['instrument/detector']:
             return self.entry['instrument/detector/polarization'].nxvalue
         elif 'calibration' in self.entry['instrument']:
-            from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
+            from pyFAI.integrator.azimuthal import AzimuthalIntegrator
             parameters = (
                 self.entry['instrument/calibration/refinement/parameters'])
             ai = AzimuthalIntegrator(
