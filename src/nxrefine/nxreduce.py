@@ -489,36 +489,7 @@ class NXReduce(QtCore.QObject):
     @property
     def parent_file(self):
         """Absolute file path to the parent file."""
-        return self.base_directory.joinpath(self.sample+'_parent.nxs')
-
-    def is_parent(self):
-        """True if the current entry is in the selected parent."""
-        if (self.parent_file.exists()
-                and self.parent_file.resolve() == self.wrapper_file):
-            return True
-        else:
-            return False
-
-    def make_parent(self):
-        """Set the current wrapper file as the parent."""
-        if self.is_parent():
-            self.log(f"'{self.wrapper_file}' already set as parent")
-            return
-        elif self.parent_file.exists():
-            if self.overwrite:
-                self.parent_file.unlink()
-                self.db.update_file(self.parent_file.resolve())
-            else:
-                raise NeXusError(f"'{self.parent_file.resolve()}' "
-                                 "already set as parent")
-        self.record_start('nxcopy')
-        self.parent_file.symlink_to(self.wrapper_file)
-        self.db.update_file(self.wrapper_file)
-        self.record('nxcopy', parent=self.wrapper_file)
-        self.record_end('nxcopy')
-        self._parent = None
-        self.log(
-            f"'{self.parent_file.resolve()}' set as parent")
+        return self.base_directory.joinpath(self.sample).with_suffix('.nxs')
 
     def get_parameter(self, name, field_name=None):
         """Return the requested data reduction parameter.
@@ -2151,6 +2122,24 @@ class NXMultiReduce(NXReduce):
         if task in ['nxcombine', 'nxmasked_combine', 'nxpdf', 'nxmasked_pdf']:
             return task in self.entry
         return self.all_complete(task)
+
+    def make_parent(self):
+        """Set the current wrapper file as the parent."""
+        with nxopen(self.parent_file, 'a') as parent_root:
+            if 'entry' not in parent_root:
+                parent_root['entry'] = NXentry()
+            if 'nxreduce' not in parent_root['entry']:
+                parent_root['entry']['nxreduce'] = self.entry['nxreduce']
+                for key, value in self.settings['nxreduce'].items():
+                    parent_root['entry']['nxreduce'][key] = value
+            else:
+                for key, value in self.entry['nxreduce'].items():
+                    parent_root['entry']['nxreduce'][key] = value
+            if 'sample' not in parent_root['entry']:
+                parent_root['entry']['sample'] = self.entry['sample']
+            else:
+                for key, value in self.entry['sample'].items():
+                    parent_root['entry']['sample'][key] = value
 
     def nxcombine(self, mask=False):
         if mask:
