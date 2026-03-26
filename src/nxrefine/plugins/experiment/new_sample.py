@@ -28,9 +28,9 @@ class SampleDialog(NXDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.sample = GridParameters()
-        self.sample.add('sample', 'sample', 'Sample Name')
-        self.sample.add('label', 'label', 'Sample Label')
+        self.sample_parameters = GridParameters()
+        self.sample_parameters.add('sample', 'sample', 'Sample Name')
+        self.sample_parameters.add('label', 'label', 'Sample Label')
 
         settings = NXSettings().settings
         self.default_directory = settings['instrument']['analysis_home']
@@ -38,7 +38,7 @@ class SampleDialog(NXDialog):
 
         self.set_layout(self.directorybox('Choose Experiment Directory',
                                           default=False), 
-                        self.sample.grid(header=False),
+                        self.sample_parameters.grid(header=False),
                         self.action_buttons(('Create Sample Directory',
                                              self.create_sample_directory)),
                         self.close_buttons(close=True))
@@ -56,8 +56,15 @@ class SampleDialog(NXDialog):
             directory = directory / self.analysis_path
         return directory
 
+    @property
+    def sample(self):
+        return self.sample_parameters['sample'].value
+
+    @property
+    def label(self):
+        return self.sample_parameters['label'].value
+
     def create_sample_directory(self):
         self.sample_directory = (self.experiment_directory /
-                                 self.sample['sample'].value /
-                                 self.sample['label'].value)
+                                 self.sample / self.label)
         self.sample_directory.mkdir(parents=True, exist_ok=True)
