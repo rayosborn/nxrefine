@@ -5,12 +5,13 @@
 #
 # The full license is in the file LICENSE.pdf, distributed with this software.
 # -----------------------------------------------------------------------------
+from pathlib import Path
 
 import numpy as np
 from nexpy.gui.dialogs import GridParameters, NXDialog
 from nexpy.gui.plotview import NXPlotView
 from nexpy.gui.utils import report_error
-from nexusformat.nexus import NeXusError, NXdata, NXfield, NXparameters
+from nexusformat.nexus import NeXusError, NXdata, NXfield, NXparameters, nxopen
 
 from nxrefine.nxreduce import NXMultiReduce, NXReduce
 from nxrefine.nxsettings import NXSettings
@@ -29,10 +30,17 @@ class ParametersDialog(NXDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-
         self.select_root(self.choose_root)
+        self.set_layout(self.root_layout,
+                        self.close_buttons(save=True))
+        self.set_title('Choose Parameters')
 
-        default = NXSettings().settings['nxreduce']
+    def choose_root(self):
+        self.entries = [self.root[entry]
+                        for entry in self.root if entry[-1].isdigit()]
+        self.reduce = NXMultiReduce(self.root)
+        default = NXSettings(self.reduce.task_directory).settings['nxreduce']
+
         self.parameters = GridParameters()
         self.parameters.add('threshold', default['threshold'],
                             'Peak Threshold')
@@ -51,14 +59,6 @@ class ParametersDialog(NXDialog):
         self.parameters.add('qmax', default['qmax'], 'Maximum Taper Q (Å-1)')
         self.parameters.add('radius', default['radius'], 'Punch Radius (Å)')
 
-        self.set_layout(self.root_layout,
-                        self.close_buttons(save=True))
-        self.set_title('Choose Parameters')
-
-    def choose_root(self):
-        self.entries = [self.root[entry]
-                        for entry in self.root if entry[-1].isdigit()]
-        self.reduce = NXReduce(self.root[self.entries[0]])
         if self.layout.count() == 2:
             self.layout.insertLayout(1, self.parameters.grid(header=False))
             self.layout.insertLayout(2, self.action_buttons(
@@ -66,6 +66,8 @@ class ParametersDialog(NXDialog):
             self.layout.insertLayout(3, 
                 self.checkboxes(('parent', 'Set As Parent', False)))
         self.read_parameters()
+        self.directory = Path(self.root.nxfilename).parent
+        self.sample = self.directory.parent.name
 
     def read_parameters(self):
         if 'nxreduce' in self.root['entry']:
@@ -173,13 +175,7 @@ class ParametersDialog(NXDialog):
         return float(self.parameters['radius'].value)
 
     def make_parent(self):
-        from pathlib import Path
-        scan_file = Path(self.root.nxfilename)
-        sample = scan_file.stem[:scan_file.stem.rindex('_')] 
-        directory = str(scan_file.parent.joinpath(
-            scan_file.stem.replace(sample+'_', '')))
-        reduce = NXMultiReduce(directory, overwrite=True)
-        reduce.make_parent()
+        self.reduce.make_parent()
 
     @property
     def pv(self):
