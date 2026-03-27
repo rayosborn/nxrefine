@@ -1,3 +1,11 @@
+# -----------------------------------------------------------------------------
+# Copyright (c) 2025-2026, Argonne National Laboratory.
+#
+# Distributed under the terms of an Open Source License.
+#
+# The full license is in the file LICENSE.pdf, distributed with this software.
+# -----------------------------------------------------------------------------
+
 import math
 import numpy as np
 from numpy.linalg import inv, norm, det, lstsq
