@@ -36,7 +36,8 @@ class NXSettings(ConfigParser):
                          'polar_max': 10.0, 'hkl_tolerance': 0.05,
                          'monitor': 'monitor1', 'norm': 50000,
                          'polarization': 0.99, 'qmin': 5.0, 'qmax': 10.0,
-                         'radius': 0.2}
+                         'radius': 0.2,
+                         'scan_path': '/entry/sample/temperature'}
         }
         self.create = create
         if directory:

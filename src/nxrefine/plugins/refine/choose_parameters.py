@@ -58,6 +58,7 @@ class ParametersDialog(NXDialog):
                             'Minimum Scattering  Q (Å-1)')
         self.parameters.add('qmax', default['qmax'], 'Maximum Taper Q (Å-1)')
         self.parameters.add('radius', default['radius'], 'Punch Radius (Å)')
+        self.parameters.add('scan_path', default['scan_path'], 'Scan Path')
 
         if self.layout.count() == 2:
             self.layout.insertLayout(1, self.parameters.grid(header=False))
@@ -93,6 +94,8 @@ class ParametersDialog(NXDialog):
                 self.parameters['qmax'].value = reduce['qmax']
             if 'radius' in reduce:
                 self.parameters['radius'].value = reduce['radius']
+            if 'scan_path' in reduce:
+                self.parameters['scan_path'].value = reduce['scan_path']
         else:
             try:
                 reduce = NXReduce(self.entries[0])
@@ -117,6 +120,8 @@ class ParametersDialog(NXDialog):
                     self.parameters['qmax'].value = reduce.qmax
                 if reduce.radius:
                     self.parameters['radius'].value = reduce.radius
+                if reduce.scan_path:
+                    self.parameters['scan_path'].value = reduce.scan_path
             except Exception:
                 pass
 
@@ -133,6 +138,7 @@ class ParametersDialog(NXDialog):
         self.root['entry/nxreduce/qmin'] = self.qmin
         self.root['entry/nxreduce/qmax'] = self.qmax
         self.root['entry/nxreduce/radius'] = self.radius
+        self.root['entry/nxreduce/scan_path'] = self.scan_path
 
     @property
     def threshold(self):
