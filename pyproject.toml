@@ -87,7 +87,7 @@ version_file = "src/nxrefine/_version.py"
 "nxrefine.julia" = ["*.jl"]
 
 [tool.ruff]
-line-length = 80
+line-length = 88
 target-version = "py310"
 exclude = ["src/nexusformat/notebooks", "src/examples/scripts"]
 
