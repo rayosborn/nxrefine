@@ -157,7 +157,7 @@ class MaskDialog(NXDialog):
                 self.pushbutton['Save Shape'].setVisible(True)
                 self.pushbutton['Remove Shape'].setVisible(True)
                 self.shape_grid = self.shape_options(self.shape)
-                self.insert_layout(4, self.shape_grid)        
+                self.insert_layout(4, self.shape_grid)
 
     def save_shape(self):
         self.pv.shapes.append(self.shapes)
@@ -212,7 +212,7 @@ class MaskDialog(NXDialog):
             self.parameters[shape]['y'].value = y
             self.parameters[shape]['r'].value = r
         self.shape_choice.setItemText(
-            self.shape_choice.findText(shape.label), repr(shape))               
+            self.shape_choice.findText(shape.label), repr(shape))
         shape.label = repr(shape)
 
     def shape_options(self, shape):

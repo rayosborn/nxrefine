@@ -11,7 +11,7 @@ import numpy as np
 from nexpy.gui.dialogs import GridParameters, NXDialog
 from nexpy.gui.plotview import NXPlotView
 from nexpy.gui.utils import report_error
-from nexusformat.nexus import NeXusError, NXdata, NXfield, NXparameters, nxopen
+from nexusformat.nexus import NeXusError, NXdata, NXfield, NXparameters
 
 from nxrefine.nxreduce import NXMultiReduce, NXReduce
 from nxrefine.nxsettings import NXSettings
@@ -64,7 +64,7 @@ class ParametersDialog(NXDialog):
             self.layout.insertLayout(1, self.parameters.grid(header=False))
             self.layout.insertLayout(2, self.action_buttons(
                 ('Plot Q-Limits', self.plot_Q_limits)))
-            self.layout.insertLayout(3, 
+            self.layout.insertLayout(3,
                 self.checkboxes(('parent', 'Set As Parent', False)))
         self.read_parameters()
         self.directory = Path(self.root.nxfilename).parent

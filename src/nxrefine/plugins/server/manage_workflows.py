@@ -529,7 +529,7 @@ class WorkflowDialog(NXDialog):
                                   ('View Workflow Logs', self.logview),
                                   ('View Workflow Output', self.outview),
                                   ('View Database', self.databaseview)),
-            close_layout)        
+            close_layout)
         dialog.setWindowTitle(
             f"{'/'.join(self.sample_directory.parts[-3:])} Logs")
         self.view_dialog = dialog
@@ -676,4 +676,4 @@ class WorkflowDialog(NXDialog):
     def reject(self):
         if self.server is not None and self.server.server_type == 'direct':
             self.server.stop()
-        super().reject()        
+        super().reject()

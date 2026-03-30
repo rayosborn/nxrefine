@@ -273,4 +273,4 @@ class ServerDialog(NXDialog):
                 self.server.stop()
         except Exception:
             pass
-        super().reject()        
+        super().reject()

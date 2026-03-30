@@ -37,7 +37,7 @@ class SampleDialog(NXDialog):
         self.analysis_path = settings['instrument']['analysis_path']
 
         self.set_layout(self.directorybox('Choose Experiment Directory',
-                                          default=False), 
+                                          default=False),
                         self.sample_parameters.grid(header=False),
                         self.action_buttons(('Create Sample Directory',
                                              self.create_sample_directory)),

@@ -8,7 +8,6 @@
 # -----------------------------------------------------------------------------
 
 import argparse
-import sys
 
 from nxrefine.nxreduce import NXMultiReduce, NXReduce
 
