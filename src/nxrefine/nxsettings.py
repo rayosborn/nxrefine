@@ -42,9 +42,11 @@ class NXSettings(ConfigParser):
         self.create = create
         if directory:
             directory = Path(directory).resolve()
-        self.file = self.get_file(directory)
+        self.file = self.get_filepath(directory)
         if self.file is None:
             raise NeXusError(f'{directory} is not a valid directory')
+        elif not self.file.exists():
+            self.create = True
         self.directory = self.file.parent
         if self.create:
             self.make_file()
@@ -54,7 +56,7 @@ class NXSettings(ConfigParser):
     def __repr__(self):
         return f"NXSettings({self.file})"
 
-    def get_file(self, directory=None):
+    def get_filepath(self, directory=None):
         if directory is None:
             if 'NX_SERVER' in os.environ:
                 directory = Path(os.environ['NX_SERVER'])
@@ -96,7 +98,7 @@ class NXSettings(ConfigParser):
             if not self.file.parent.joinpath('locks').exists():
                 self.file.parent.joinpath('locks').mkdir(mode=0o777)
         else:
-            default_file = self.get_file()
+            default_file = self.get_filepath()
             self.file.write_text(default_file.read_text())
             self.read()
             self.save()
