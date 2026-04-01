@@ -6,13 +6,20 @@
 # The full license is in the file LICENSE.pdf, distributed with this software.
 # -----------------------------------------------------------------------------
 
+import numpy as np
 from pathlib import Path
+from turtle import width
 
 from nexpy.gui.dialogs import GridParameters, NXDialog
-from nexpy.gui.utils import report_error
-from nexusformat.nexus import NeXusError
+from nexpy.gui.plotview import NXPlotView
+from nexpy.gui.utils import confirm_action, report_error
+from nexpy.gui.widgets import NXLabel, NXLineEdit
+from nexusformat.nexus import (NeXusError, NXdata, NXentry, NXfield,
+                               NXparameters, NXroot, NXsample, nxopen)
 
+from nxrefine.nxreduce import NXReduce
 from nxrefine.nxsettings import NXSettings
+from nxrefine.nxutils import detector_flipped
 
 
 def show_dialog():
@@ -28,26 +35,100 @@ class SampleDialog(NXDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.sample_parameters = GridParameters()
-        self.sample_parameters.add('sample', 'sample', 'Sample Name')
-        self.sample_parameters.add('label', 'label', 'Sample Label')
-
         settings = NXSettings().settings
         self.default_directory = settings['instrument']['analysis_home']
         self.analysis_path = settings['instrument']['analysis_path']
 
         self.set_layout(self.directorybox('Choose Experiment Directory',
                                           default=False), 
-                        self.sample_parameters.grid(header=False),
-                        self.action_buttons(('Create Sample Directory',
-                                             self.create_sample_directory)),
-                        self.close_buttons(close=True))
+                        self.close_buttons(save=True))
         self.set_title('New Sample')
+        self.sample_root = None
 
     def choose_directory(self):
         if self.default_directory:
             self.set_default_directory(self.default_directory)
         super().choose_directory()
+
+        self.settings = NXSettings(self.task_directory).settings
+
+        self.sample_box = NXLineEdit('sample')
+        self.label_box = NXLineEdit('label')
+        self.sample_layout = self.make_layout(
+            NXLabel('Sample Name:'), self.sample_box, 
+            NXLabel('Sample Label:'), self.label_box)
+        self.configuration_box = self.select_box(self.get_configurations())
+        self.configuration_layout = self.make_layout(
+            self.action_buttons(('Choose Experiment Configuration',
+                                 self.choose_configuration)),
+            self.configuration_box)
+
+        self.sample_layout = self.make_layout(self.sample_layout,
+                                              self.configuration_layout,
+                                              vertical=True)
+        self.insert_layout(1, self.sample_layout)
+        self.activate()
+
+    def get_configurations(self):
+        directory = self.experiment_directory / 'configurations'
+        if directory.exists():
+            return sorted([str(f.name) for f in directory.glob('*.nxs')])
+        else:
+            return []
+
+    def choose_configuration(self):
+        config_file = (self.experiment_directory / 'configurations' /
+                       self.configuration)
+
+        default = self.settings['nxreduce']
+
+        self.parameters = GridParameters()
+        self.parameters.add('threshold', default['threshold'],
+                            'Peak Threshold')
+        self.parameters.add('first', default['first'], 'First Frame')
+        self.parameters.add('last', default['last'], 'Last Frame')
+        self.parameters.add('polar_max', default['polar_max'],
+                            'Max. Polar Angle')
+        self.parameters.add('hkl_tolerance', default['hkl_tolerance'],
+                            'HKL Tolerance (Å-1)')
+        self.parameters.add('monitor', default['monitor'],
+                            'Normalization Monitor')
+        self.parameters['monitor'].value = default['monitor']
+        self.parameters.add('norm', default['norm'], 'Normalization Value')
+        self.parameters.add('qmin', default['qmin'],
+                            'Minimum Scattering  Q (Å-1)')
+        self.parameters.add('qmax', default['qmax'], 'Maximum Taper Q (Å-1)')
+        self.parameters.add('radius', default['radius'], 'Punch Radius (Å)')
+        self.parameters.add('scan_path', default['scan_path'], 'Scan Path')
+
+        self.parameters_grid = self.parameters.grid(header=False, width=200)
+        self.parameters_grid.setHorizontalSpacing(10)
+        self.parameters_layout = self.make_layout(self.parameters_grid)
+
+        self.sample_root = NXroot()
+        with nxopen(config_file, 'r') as root:
+            for entry in root.entries:
+                self.sample_root[entry] = root[entry]
+        if 'nxreduce' in self.sample_root['entry']:
+            for p in [p for p in self.sample_root['entry/nxreduce']
+                      if p in self.parameters]:
+                self.parameters[p].value = (
+                    self.sample_root['entry/nxreduce'][p].nxvalue)
+        self.update_parameters()
+
+        self.insert_layout(2, self.parameters_layout)
+        self.insert_layout(3, self.action_buttons(('Plot Q-Limits',
+                                                   self.plot_Q_limits)))
+
+    def update_parameters(self):
+        if 'sample' not in self.sample_root['entry']:
+            self.sample_root['entry/sample'] = NXsample()
+        self.sample_root['entry/sample/name'] = self.sample
+        self.sample_root['entry/sample/label'] = self.label
+        if 'nxreduce' not in self.sample_root['entry']:
+            self.sample_root['entry/nxreduce'] = NXparameters()
+        for p in self.parameters:
+            self.sample_root['entry/nxreduce'][p] = self.parameters[p].value
 
     @property
     def experiment_directory(self):
@@ -57,14 +138,120 @@ class SampleDialog(NXDialog):
         return directory
 
     @property
+    def task_directory(self):
+        return self.experiment_directory / 'tasks'
+
+    @property
+    def configuration(self):
+        return self.configuration_box.currentText()
+
+    @property
     def sample(self):
-        return self.sample_parameters['sample'].value
+        return self.sample_box.text()
 
     @property
     def label(self):
-        return self.sample_parameters['label'].value
+        return self.label_box.text()
 
-    def create_sample_directory(self):
-        self.sample_directory = (self.experiment_directory /
-                                 self.sample / self.label)
+    @property
+    def instrument(self):
+        entry = [e for e in self.sample_root if e != 'entry'][0]
+        return self.sample_root[f'{entry}/instrument']
+
+    @property
+    def wavelength(self):
+        return self.instrument['monochromator/wavelength'].nxvalue
+
+    @property
+    def distance(self):
+        return self.instrument['detector/distance'].nxvalue
+
+    @property
+    def pixel_size(self):
+        return self.instrument['detector/pixel_size'].nxvalue
+
+    @property
+    def xc(self):
+        return self.instrument['detector/beam_center_x'].nxvalue
+
+    @property
+    def yc(self):
+        return self.instrument['detector/beam_center_y'].nxvalue
+
+    @property
+    def shape(self):
+        return self.instrument['detector/pixel_mask'].shape
+
+    @property
+    def qmin(self):
+        return float(self.parameters['qmin'].value)
+
+    @property
+    def qmax(self):
+        return float(self.parameters['qmax'].value)
+
+    @property
+    def pv(self):
+        if 'Q-Limits' in self.plotviews:
+            return self.plotviews['Q-Limits']
+        else:
+            return NXPlotView('Q-Limits')
+
+
+    def transmission_coordinates(self):
+        """
+        Generate a mask array for excluding pixels outside of the
+        specified transmission coordinate range.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        array-like
+            A 2D boolean mask array with the same shape as the data. The
+            mask is True for pixels with transmission coordinates
+            outside of the specified range and False otherwise.
+        """
+        min_radius = (self.qmin * self.wavelength * self.distance
+                      / (2 * np.pi * self.pixel_size))
+        max_radius = (self.qmax * self.wavelength * self.distance
+                      / (2 * np.pi * self.pixel_size))
+        x = np.arange(self.shape[1])
+        y = np.arange(self.shape[0])
+        min_mask = ((x[np.newaxis, :]-self.xc)**2
+                    + (y[:, np.newaxis]-self.yc)**2 < min_radius**2)
+        max_mask = ((x[np.newaxis, :]-self.xc)**2
+                    + (y[:, np.newaxis]-self.yc)**2 > max_radius**2)
+        return min_mask | max_mask
+
+    def plot_Q_limits(self):
+        self.pv.plot(NXdata(self.transmission_coordinates(),
+                            (NXfield(np.arange(self.shape[0]), name='y'),
+                             NXfield(np.arange(self.shape[1]), name='x')),
+                            title=f'Q-Limits'))
+        self.pv.aspect = 'equal'
+        self.pv.ytab.flipped = detector_flipped(self.sample_root['entry'])
+
+    @property
+    def sample_directory(self):
+        return self.experiment_directory / self.sample / self.label
+
+    @property
+    def parent_file(self):
+        return self.sample_directory.joinpath(self.sample).with_suffix('.nxs')
+
+    def accept(self):
+        if self.sample_root is None:
+            report_error("Defining New Sample",
+                         "Choose a configuration file first.")
         self.sample_directory.mkdir(parents=True, exist_ok=True)
+        if self.parent_file.exists() and not confirm_action(
+                "Overwrite parent file?", 
+                f"'{self.parent_file}' already exists."):
+            return
+        self.update_parameters()
+        self.sample_root.save(self.parent_file, 'w')
+        self.treeview.tree.load(self.parent_file, 'rw')
+        super().accept()
