@@ -7,8 +7,8 @@
 # -----------------------------------------------------------------------------
 
 from . import (calibrate_powder, create_mask, edit_settings, import_scans,
-               make_scans, new_configuration, new_experiment, new_sample,
-               new_scan, sum_scans)
+               make_scans, new_configuration, new_experiment, new_parent,
+               new_sample, new_scan, sum_scans)
 
 
 def plugin_menu():
@@ -19,6 +19,7 @@ def plugin_menu():
     actions.append(('Calibrate Powder', calibrate_powder.show_dialog))
     actions.append(('Create Mask', create_mask.show_dialog))
     actions.append(('New Sample', new_sample.show_dialog))
+    actions.append(('New Parent', new_parent.show_dialog))
     actions.append(('New Scan', new_scan.show_dialog))
     actions.append(('Make Scans', make_scans.show_dialog))
     actions.append(('Import Scans', import_scans.show_dialog))
