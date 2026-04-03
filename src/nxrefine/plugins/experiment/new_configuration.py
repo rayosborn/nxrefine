@@ -11,9 +11,9 @@ from pathlib import Path
 import numpy as np
 from nexpy.gui.dialogs import GridParameters, NXDialog
 from nexpy.gui.utils import report_error
-from nexusformat.nexus import (NXdetector, NXentry, NXfield, NXgoniometer,
-                               NXinstrument, NXmonochromator, NXparameters,
-                               NXroot, NXsource)
+from nexusformat.nexus import (NXdata, NXdetector, NXentry, NXfield,
+                               NXgoniometer, NXinstrument, NXlink,
+                               NXmonochromator, NXparameters, NXroot, NXsource)
 from pyFAI.detectors import ALL_DETECTORS
 
 from nxrefine.nxsettings import NXSettings
@@ -193,6 +193,10 @@ class ConfigurationDialog(NXDialog):
         self.detectors[position].add('theta', default['theta'], 'Theta (deg)')
         self.detectors[position].add('x', default['x'], 'Translation - x (mm)')
         self.detectors[position].add('y', default['y'], 'Translation - y (mm)')
+        self.detectors[position].add('linkfile', f'f{position:d}.h5',
+                                     'Detector Filename')
+        self.detectors[position].add('linkpath', '/entry/data/data',
+                                     'Detector Data Path')
         self.configuration_file[f'f{position}'] = entry
 
     def get_detector(self):
@@ -262,6 +266,7 @@ class ConfigurationDialog(NXDialog):
         entry['instrument/detector/yaw'] = 0.0
         entry['instrument/detector/pitch'] = 0.0
         entry['instrument/detector/roll'] = 0.0
+        y_size, x_size = entry['instrument/detector/shape'].nxvalue
         for position in range(1, self.positions+1):
             entry = self.configuration_file[f'f{position}']
             entry['instrument'] = self.configuration_file['entry/instrument']
@@ -288,6 +293,19 @@ class ConfigurationDialog(NXDialog):
                 self.detectors[position]['omega'].value)
             entry['instrument/goniometer/theta'] = (
                 self.detectors[position]['theta'].value)
+            frame_number = np.arange(int(
+                (self.scan['phi_end'].value - self.scan['phi_start'].value) /
+                self.scan['phi_step'].value))
+            entry['data'] = NXdata()
+            linkpath = self.detectors[position]['linkpath'].value
+            linkfile = self.detectors[position]['linkfile'].value
+            entry['data'].nxsignal = NXlink(linkpath, linkfile)
+            entry['data/x_pixel'] = np.arange(x_size, dtype=np.int32)
+            entry['data/y_pixel'] = np.arange(y_size, dtype=np.int32)
+            entry['data/frame_number'] = frame_number
+            entry['data'].nxaxes = [entry['data/frame_number'],
+                                    entry['data/y_pixel'],
+                                    entry['data/x_pixel']]
 
     def accept(self):
         try:

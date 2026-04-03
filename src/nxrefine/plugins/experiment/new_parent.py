@@ -24,7 +24,7 @@ def show_dialog():
         dialog = ParentDialog()
         dialog.show()
     except NeXusError as error:
-        report_error("Defining New Parent", error)
+        report_error("Creating New Parent", error)
 
 
 class ParentDialog(NXDialog):
@@ -65,7 +65,7 @@ class ParentDialog(NXDialog):
             for label_directory in label_directories:
                 samples.append(
                     label_directory.relative_to(self.experiment_directory))
-        return [str(sample) for sample in samples]
+        return sorted([str(sample) for sample in samples])
 
     def choose_sample(self):
         self.configuration_box = self.select_box(self.get_configurations())
@@ -89,7 +89,7 @@ class ParentDialog(NXDialog):
         default = self.settings['nxreduce']
 
         self.parameters = GridParameters()
-        self.parameters.add('parent', self.sample, 'Name of Parent')
+        self.parameters.add('parent', self.sample, 'Parent Prefix')
         self.parameters.add('threshold', default['threshold'],
                             'Peak Threshold')
         self.parameters.add('first', default['first_frame'], 'First Frame')
@@ -248,8 +248,8 @@ class ParentDialog(NXDialog):
 
     @property
     def parent_file(self):
-        parent_name = self.parameters['parent'].value
-        return self.sample_directory.joinpath(parent_name).with_suffix('.nxs')
+        parent_name = self.parameters['parent'].value + '_parent.nxs'
+        return self.sample_directory.joinpath(parent_name)
 
     def accept(self):
         if self.sample_root is None:
