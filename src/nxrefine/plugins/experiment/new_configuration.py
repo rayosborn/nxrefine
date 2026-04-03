@@ -116,8 +116,10 @@ class ConfigurationDialog(NXDialog):
                                                   dtype=float)
         entry['nxreduce/monitor'] = NXfield(default['monitor'])
         entry['nxreduce/norm'] = NXfield(default['norm'], dtype=float)
-        entry['nxreduce/first_frame'] = NXfield(default['first'], dtype=int)
-        entry['nxreduce/last_frame'] = NXfield(default['last'], dtype=int)
+        entry['nxreduce/first_frame'] = NXfield(default['first_frame'],
+                                                dtype=int)
+        entry['nxreduce/last_frame'] = NXfield(default['last_frame'],
+                                               dtype=int)
         entry['nxreduce/radius'] = NXfield(default['radius'], dtype=float)
         self.analysis = GridParameters()
         self.analysis.add('threshold', entry['nxreduce/threshold'],

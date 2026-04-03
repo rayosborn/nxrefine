@@ -44,8 +44,8 @@ class ParametersDialog(NXDialog):
         self.parameters = GridParameters()
         self.parameters.add('threshold', default['threshold'],
                             'Peak Threshold')
-        self.parameters.add('first', default['first'], 'First Frame')
-        self.parameters.add('last', default['last'], 'Last Frame')
+        self.parameters.add('first', default['first_frame'], 'First Frame')
+        self.parameters.add('last', default['last_frame'], 'Last Frame')
         self.parameters.add('polar_max', default['polar_max'],
                             'Max. Polar Angle')
         self.parameters.add('hkl_tolerance', default['hkl_tolerance'],
