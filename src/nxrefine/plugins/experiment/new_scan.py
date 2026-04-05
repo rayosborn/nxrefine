@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from nexpy.gui.dialogs import GridParameters, NXDialog
+from nexpy.gui.pyqt import getOpenFileName
 from nexpy.gui.utils import confirm_action, report_error
 from nexpy.gui.widgets import NXLabel, NXLineEdit
 from nexusformat.nexus import (NeXusError, NXfield, NXlink, NXprocess, NXroot,
@@ -42,8 +43,17 @@ class ScanDialog(NXDialog):
         self.set_title('New Scan')
 
     def choose_file(self):
-        super().choose_file()
-        self.parent_file = Path(self.get_filename())
+        dirname = self.get_default_directory()
+        filename = Path(getOpenFileName(self, 'Open File', dirname,
+                                        filter="Parent Files (*_parent.nxs)"))
+        if filename.is_file():
+            self.filename.setText(str(filename))
+            self.set_default_directory(filename.parent)
+        else:
+            self.filename.setText('')
+            self.status_message.setText('No file selected')
+            return
+        self.parent_file = Path(self.filename.text())
         self.copy_parent()
         self.scan_box = NXLineEdit('300', align='right')
         self.scan_layout = self.make_layout(NXLabel(self.scan_label),
@@ -107,7 +117,10 @@ class ScanDialog(NXDialog):
             value_str = str(value)
         scan_prefix = self.scan_parent.replace(self.sample, '').replace(
             'parent', '').strip('_')
-        return f"{scan_prefix}_{prefix}{value_str}{self.scan_units}"
+        if scan_prefix:
+            return f"{scan_prefix}_{prefix}{value_str}{self.scan_units}"
+        else:
+            return f"{prefix}{value_str}{self.scan_units}"
 
     @property
     def scan_name(self):
