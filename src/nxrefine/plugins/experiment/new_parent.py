@@ -8,12 +8,13 @@
 
 from pathlib import Path
 
+from matplotlib.pyplot import sca
 import numpy as np
 from nexpy.gui.dialogs import GridParameters, NXDialog
 from nexpy.gui.plotview import NXPlotView
 from nexpy.gui.utils import confirm_action, report_error
 from nexusformat.nexus import (NeXusError, NXdata, NXfield, NXparameters,
-                               NXroot, NXsample, nxopen)
+                               NXprocess, NXroot, NXsample, nxopen)
 
 from nxrefine.nxsettings import NXSettings
 from nxrefine.nxutils import detector_flipped
@@ -36,7 +37,7 @@ class ParentDialog(NXDialog):
                                           default=False), 
                         self.close_buttons(save=True))
         self.set_title('New Parent')
-        self.sample_root = None
+        self.parent_root = None
         settings = NXSettings().settings
         self.analysis_path = settings['instrument']['analysis_path']
 
@@ -113,15 +114,15 @@ class ParentDialog(NXDialog):
         self.parameters_grid.setHorizontalSpacing(10)
         self.parameters_layout = self.make_layout(self.parameters_grid)
 
-        self.sample_root = NXroot()
+        self.parent_root = NXroot()
         with nxopen(config_file, 'r') as root:
             for entry in root.entries:
-                self.sample_root[entry] = root[entry]
-        if 'nxreduce' in self.sample_root['entry']:
-            for p in [p for p in self.sample_root['entry/nxreduce']
+                self.parent_root[entry] = root[entry]
+        if 'nxreduce' in self.parent_root['entry']:
+            for p in [p for p in self.parent_root['entry/nxreduce']
                       if p in self.parameters]:
                 self.parameters[p].value = (
-                    self.sample_root['entry/nxreduce'][p].nxvalue)
+                    self.parent_root['entry/nxreduce'][p].nxvalue)
         self.update_parameters()
 
         self.insert_layout(3, self.parameters_layout)
@@ -129,14 +130,16 @@ class ParentDialog(NXDialog):
                                                    self.plot_Q_limits)))
 
     def update_parameters(self):
-        if 'sample' not in self.sample_root['entry']:
-            self.sample_root['entry/sample'] = NXsample()
-        self.sample_root['entry/sample/name'] = self.sample
-        self.sample_root['entry/sample/label'] = self.label
-        if 'nxreduce' not in self.sample_root['entry']:
-            self.sample_root['entry/nxreduce'] = NXparameters()
+        if 'sample' not in self.parent_root['entry']:
+            self.parent_root['entry/sample'] = NXsample()
+        self.parent_root['entry/sample/name'] = self.sample
+        self.parent_root['entry/sample/label'] = self.label
+        if 'nxreduce' not in self.parent_root['entry']:
+            self.parent_root['entry/nxreduce'] = NXparameters()
         for p in self.parameters:
-            self.sample_root['entry/nxreduce'][p] = self.parameters[p].value
+            self.parent_root['entry/nxreduce'][p] = self.parameters[p].value
+        if 'nxscans' not in self.parent_root['entry']:
+            self.parent_root['entry/nxscans'] = self.scan_info()
 
     @property
     def experiment_directory(self):
@@ -163,8 +166,8 @@ class ParentDialog(NXDialog):
 
     @property
     def instrument(self):
-        entry = [e for e in self.sample_root if e != 'entry'][0]
-        return self.sample_root[f'{entry}/instrument']
+        entry = [e for e in self.parent_root if e != 'entry'][0]
+        return self.parent_root[f'{entry}/instrument']
 
     @property
     def wavelength(self):
@@ -240,7 +243,7 @@ class ParentDialog(NXDialog):
                              NXfield(np.arange(self.shape[1]), name='x')),
                             title=f'Q-Limits'))
         self.pv.aspect = 'equal'
-        self.pv.ytab.flipped = detector_flipped(self.sample_root['entry'])
+        self.pv.ytab.flipped = detector_flipped(self.parent_root['entry'])
 
     @property
     def sample_directory(self):
@@ -251,8 +254,17 @@ class ParentDialog(NXDialog):
         parent_name = self.parameters['parent'].value + '_parent.nxs'
         return self.sample_directory.joinpath(parent_name)
 
+    def scan_info(self):
+        scan_info = NXprocess()
+        from nexusformat.nexus.tree import string_dtype
+        scan_info['filenames'] = NXfield(shape=(0,), dtype=string_dtype,
+                                         maxshape=(None,))
+        scan_info['select'] = NXfield(shape=(0,), dtype='int8',
+                                      maxshape=(None,))
+        return scan_info
+
     def accept(self):
-        if self.sample_root is None:
+        if self.parent_root is None:
             report_error("Defining New Sample",
                          "Choose a configuration file first.")
         if self.parent_file.exists() and not confirm_action(
@@ -260,6 +272,6 @@ class ParentDialog(NXDialog):
                 f"'{self.parent_file}' already exists."):
             return
         self.update_parameters()
-        self.sample_root.save(self.parent_file, 'w')
+        self.parent_root.save(self.parent_file, 'w')
         self.treeview.tree.load(self.parent_file, 'rw')
         super().accept()

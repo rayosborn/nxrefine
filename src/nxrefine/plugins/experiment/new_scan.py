@@ -12,8 +12,8 @@ import numpy as np
 from nexpy.gui.dialogs import GridParameters, NXDialog
 from nexpy.gui.utils import confirm_action, report_error
 from nexpy.gui.widgets import NXLabel, NXLineEdit
-from nexusformat.nexus import (NeXusError, NXdata, NXfield, NXgoniometer,
-                               NXlink, NXroot, NXsample, nxopen)
+from nexusformat.nexus import (NeXusError, NXfield, NXlink, NXprocess, NXroot,
+                               nxopen)
 
 from nxrefine.nxrefine import NXRefine
 from nxrefine.nxsettings import NXSettings
@@ -44,11 +44,7 @@ class ScanDialog(NXDialog):
     def choose_file(self):
         super().choose_file()
         self.parent_file = Path(self.get_filename())
-        self.parent_root = nxopen(self.parent_file, 'r')
-        self.positions = len(self.parent_root.entries) - 1
         self.copy_parent()
-        self.scan_path = self.parent_root['entry/nxreduce/scan_path'].nxvalue
-        self.scan_units = self.parent_root['entry/nxreduce/scan_units'].nxvalue
         self.scan_box = NXLineEdit('300', align='right')
         self.scan_layout = self.make_layout(NXLabel(self.scan_label),
                                             self.scan_box,
@@ -58,9 +54,13 @@ class ScanDialog(NXDialog):
                                                    self.make_scan)))
 
     def copy_parent(self):
-        self.scan_root = NXroot()
-        for entry in self.parent_root.entries:
-            self.scan_root[entry] = self.parent_root[entry]
+        self.parent_root = NXroot()
+        with nxopen(self.parent_file, 'r') as root:
+            self.scan_path = root['entry/nxreduce/scan_path'].nxvalue
+            self.scan_units = root['entry/nxreduce/scan_units'].nxvalue
+            self.scan_prefix = root['entry/nxreduce/parent'].nxvalue
+            for entry in root.entries:
+                self.parent_root[entry] = root[entry]
 
     @property
     def experiment_directory(self):
@@ -72,12 +72,11 @@ class ScanDialog(NXDialog):
 
     @property
     def sample(self):
-        return self.scan_root['entry/sample/name'].nxvalue
+        return self.parent_root['entry/sample/name'].nxvalue
 
     @property
     def label(self):
-        return self.scan_root['entry/sample/label'].nxvalue
-
+        return self.parent_root['entry/sample/label'].nxvalue
     @property
     def scan_value(self):
         return float(self.scan_box.text())
@@ -85,13 +84,9 @@ class ScanDialog(NXDialog):
     @property
     def scan_label(self):
         if self.scan_path:
-            return Path(self.scan_path).name.replace('_', ' ').capitalize()
+            return Path(self.scan_path).name.replace('_', ' ').title()
         else:
             return 'scan'
-
-    @property
-    def scan_prefix(self):
-        return self.parent_root['entry/nxreduce/parent'].nxvalue
 
     @property
     def scan_suffix(self):
@@ -111,14 +106,33 @@ class ScanDialog(NXDialog):
     def scan_name(self):
         return self.scan_prefix + '_' + self.scan_suffix + '.nxs'
 
-    def update_scan(self):
-        self.scan_root[self.scan_path] = NXfield(self.scan_value,
-                                                 units=self.scan_units)
-        for entry in [e for e in self.scan_root.entries if e != 'entry']:
-            data_link = self.scan_root[f"{entry}/data/data"]
-            _target, _filename = data_link._target, data_link._filename
-            del self.scan_root[f"{entry}/data/data"]
-            self.scan_root[f"{entry}/data/data"] = NXlink(_target, _filename)
+    def scan_info(self):
+        scan_info = NXprocess()
+        from nexusformat.nexus.tree import string_dtype
+        scan_info['filenames'] = NXfield(shape=(0,), dtype=string_dtype)
+        scan_info['select'] = NXfield(shape=(0,), dtype='int8')
+        return scan_info
+
+    def create_scan(self):
+        scan_root = NXroot()
+        for entry in self.parent_root.entries:
+            scan_root[entry] = self.parent_root[entry]
+            if entry != 'entry':
+                data_link = scan_root[f"{entry}/data/data"]
+                _target, _filename = data_link._target, data_link._filename
+                scan_root[f"{entry}/data/data"] = NXlink(_target, _filename)
+        scan_root[self.scan_path] = NXfield(self.scan_value,
+                                            units=self.scan_units)
+        if 'nxscans' in scan_root['entry']:
+            del scan_root['entry/nxscans']
+        with nxopen(self.parent_file, 'rw') as parent_root:
+            scan_info = parent_root['entry/nxscans']
+            current_count = scan_info['filenames'].shape[0]
+            scan_info['filenames'].resize((current_count + 1,))
+            scan_info['select'].resize((current_count + 1,))
+            scan_info['filenames'][current_count] = self.scan_name
+            scan_info['select'][current_count] = 1
+        return scan_root
 
     def make_scan(self):
         self.mainwindow.default_directory = str(self.experiment_directory)
@@ -130,7 +144,8 @@ class ScanDialog(NXDialog):
                 "Overwrite existing scan file?",
                 f"'{scan_file}' already exists."):
             return
-        self.update_scan()
-        self.scan_root.save(scan_file, 'w')
-        self.status_message.setText(f"Created scan file '{scan_file}'")
+        scan_root = self.create_scan()
+        scan_root.save(scan_file, 'w')
+        new_scan_path = scan_file.relative_to(self.experiment_directory.parent)
+        self.status_message.setText(f"Created scan file '{new_scan_path}'")
         self.treeview.tree.load(scan_file, 'rw')
