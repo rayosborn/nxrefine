@@ -123,23 +123,10 @@ class ParentDialog(NXDialog):
                       if p in self.parameters]:
                 self.parameters[p].value = (
                     self.parent_root['entry/nxreduce'][p].nxvalue)
-        self.update_parameters()
 
         self.insert_layout(3, self.parameters_layout)
         self.insert_layout(4, self.action_buttons(('Plot Q-Limits',
                                                    self.plot_Q_limits)))
-
-    def update_parameters(self):
-        if 'sample' not in self.parent_root['entry']:
-            self.parent_root['entry/sample'] = NXsample()
-        self.parent_root['entry/sample/name'] = self.sample
-        self.parent_root['entry/sample/label'] = self.label
-        if 'nxreduce' not in self.parent_root['entry']:
-            self.parent_root['entry/nxreduce'] = NXparameters()
-        for p in self.parameters:
-            self.parent_root['entry/nxreduce'][p] = self.parameters[p].value
-        if 'nxscans' not in self.parent_root['entry']:
-            self.parent_root['entry/nxscans'] = self.scan_info()
 
     @property
     def experiment_directory(self):
@@ -256,12 +243,20 @@ class ParentDialog(NXDialog):
 
     def scan_info(self):
         scan_info = NXprocess()
-        from nexusformat.nexus.tree import string_dtype
-        scan_info['filenames'] = NXfield(shape=(0,), dtype=string_dtype,
-                                         maxshape=(None,))
-        scan_info['select'] = NXfield(shape=(0,), dtype='int8',
-                                      maxshape=(None,))
+        scan_info['parent'] = self.parent_file.name
         return scan_info
+
+    def create_parent(self):
+        if 'sample' not in self.parent_root['entry']:
+            self.parent_root['entry/sample'] = NXsample()
+        self.parent_root['entry/sample/name'] = self.sample
+        self.parent_root['entry/sample/label'] = self.label
+        if 'nxreduce' not in self.parent_root['entry']:
+            self.parent_root['entry/nxreduce'] = NXparameters()
+        for p in self.parameters:
+            self.parent_root['entry/nxreduce'][p] = self.parameters[p].value
+        if 'nxscans' not in self.parent_root['entry']:
+            self.parent_root['entry/nxscans'] = self.scan_info()
 
     def accept(self):
         if self.parent_root is None:
@@ -271,7 +266,7 @@ class ParentDialog(NXDialog):
                 "Overwrite parent file?", 
                 f"'{self.parent_file}' already exists."):
             return
-        self.update_parameters()
+        self.create_parent()
         self.parent_root.save(self.parent_file, 'w')
         self.treeview.tree.load(self.parent_file, 'rw')
         super().accept()

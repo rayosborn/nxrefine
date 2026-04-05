@@ -61,6 +61,10 @@ class ScanDialog(NXDialog):
             self.scan_prefix = root['entry/nxreduce/parent'].nxvalue
             for entry in root.entries:
                 self.parent_root[entry] = root[entry]
+        self.parent_root['entry/nxscans'] = self.scan_info()
+
+    def scan_info(self):
+        return NXprocess(parent=self.parent_file.name)
 
     @property
     def experiment_directory(self):
@@ -106,13 +110,6 @@ class ScanDialog(NXDialog):
     def scan_name(self):
         return self.scan_prefix + '_' + self.scan_suffix + '.nxs'
 
-    def scan_info(self):
-        scan_info = NXprocess()
-        from nexusformat.nexus.tree import string_dtype
-        scan_info['filenames'] = NXfield(shape=(0,), dtype=string_dtype)
-        scan_info['select'] = NXfield(shape=(0,), dtype='int8')
-        return scan_info
-
     def create_scan(self):
         scan_root = NXroot()
         for entry in self.parent_root.entries:
@@ -123,15 +120,20 @@ class ScanDialog(NXDialog):
                 scan_root[f"{entry}/data/data"] = NXlink(_target, _filename)
         scan_root[self.scan_path] = NXfield(self.scan_value,
                                             units=self.scan_units)
-        if 'nxscans' in scan_root['entry']:
-            del scan_root['entry/nxscans']
+        from nexusformat.nexus.tree import string_dtype
         with nxopen(self.parent_file, 'rw') as parent_root:
             scan_info = parent_root['entry/nxscans']
-            current_count = scan_info['filenames'].shape[0]
-            scan_info['filenames'].resize((current_count + 1,))
-            scan_info['select'].resize((current_count + 1,))
-            scan_info['filenames'][current_count] = self.scan_name
-            scan_info['select'][current_count] = 1
+            if 'filenames' not in scan_info:
+                scan_info['filenames'] = NXfield(
+                    [self.scan_name], dtype=string_dtype, maxshape=(None,))
+                scan_info['select'] = NXfield(
+                    [1], dtype=bool, maxshape=(None,))
+            elif self.scan_name not in scan_info['filenames']:
+                current_count = scan_info['filenames'].shape[0]
+                scan_info['filenames'].resize((current_count + 1,))
+                scan_info['filenames'][current_count] = self.scan_name
+                scan_info['select'].resize((current_count + 1,))
+                scan_info['select'][current_count] = 1
         return scan_root
 
     def make_scan(self):
@@ -148,4 +150,9 @@ class ScanDialog(NXDialog):
         scan_root.save(scan_file, 'w')
         new_scan_path = scan_file.relative_to(self.experiment_directory.parent)
         self.status_message.setText(f"Created scan file '{new_scan_path}'")
-        self.treeview.tree.load(scan_file, 'rw')
+        if scan_file.stem in self.treeview.tree:
+            self.treeview.tree[scan_file.stem].reload()
+        else:
+            self.treeview.tree.load(scan_file, 'rw')
+        if self.parent_file.stem in self.treeview.tree:
+            self.treeview.tree[self.parent_file.stem].reload()
