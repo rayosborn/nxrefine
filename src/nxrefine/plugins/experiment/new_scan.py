@@ -58,7 +58,7 @@ class ScanDialog(NXDialog):
         with nxopen(self.parent_file, 'r') as root:
             self.scan_path = root['entry/nxreduce/scan_path'].nxvalue
             self.scan_units = root['entry/nxreduce/scan_units'].nxvalue
-            self.scan_prefix = root['entry/nxreduce/parent'].nxvalue
+            self.scan_parent = root['entry/nxreduce/parent'].nxvalue
             for entry in root.entries:
                 self.parent_root[entry] = root[entry]
         self.parent_root['entry/nxscans'] = self.scan_info()
@@ -81,6 +81,7 @@ class ScanDialog(NXDialog):
     @property
     def label(self):
         return self.parent_root['entry/sample/label'].nxvalue
+
     @property
     def scan_value(self):
         return float(self.scan_box.text())
@@ -90,10 +91,10 @@ class ScanDialog(NXDialog):
         if self.scan_path:
             return Path(self.scan_path).name.replace('_', ' ').title()
         else:
-            return 'scan'
+            return 'Scan Value'
 
     @property
-    def scan_suffix(self):
+    def scan_directory(self):
         value = self.scan_value
         prefix = 'm' if value < 0 else ''
         value = abs(value)
@@ -104,11 +105,13 @@ class ScanDialog(NXDialog):
                 value_str = str(value).replace('.', 'p')
         else:
             value_str = str(value)
-        return f"{prefix}{value_str}{self.scan_units}"
+        scan_prefix = self.scan_parent.replace(self.sample, '').replace(
+            'parent', '').strip('_')
+        return f"{scan_prefix}_{prefix}{value_str}{self.scan_units}"
 
     @property
     def scan_name(self):
-        return self.scan_prefix + '_' + self.scan_suffix + '.nxs'
+        return self.sample + '_' + self.scan_directory + '.nxs'
 
     def create_scan(self):
         scan_root = NXroot()
@@ -139,8 +142,8 @@ class ScanDialog(NXDialog):
     def make_scan(self):
         self.mainwindow.default_directory = str(self.experiment_directory)
         label_directory = self.experiment_directory / self.sample / self.label
-        self.scan_directory = label_directory / self.scan_suffix
-        self.scan_directory.mkdir(exist_ok=True)
+        scan_directory = label_directory / self.scan_directory
+        scan_directory.mkdir(exist_ok=True)
         scan_file = label_directory / self.scan_name
         if scan_file.exists() and not confirm_action(
                 "Overwrite existing scan file?",
