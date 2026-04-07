@@ -55,12 +55,17 @@ class ScanDialog(NXDialog):
             return
         self.parent_file = Path(self.filename.text())
         self.copy_parent()
-        self.scan_box = NXLineEdit('300', align='right')
+        self.scan_box = NXLineEdit('300', align='right', slot=self.update_scan)
         self.scan_layout = self.make_layout(NXLabel(self.scan_label),
                                             self.scan_box,
                                             NXLabel(self.scan_units))
         self.insert_layout(1, self.scan_layout)
-        self.insert_layout(2, self.action_buttons(('Make Scan File',
+        self.scandir_box = NXLineEdit('', align='right')
+        self.scandir_layout = self.make_layout(NXLabel('Scan Directory:'),
+                                               self.scandir_box)
+        self.update_scan()
+        self.insert_layout(2, self.scandir_layout) 
+        self.insert_layout(3, self.action_buttons(('Make Scan File',
                                                    self.make_scan)))
 
     def copy_parent(self):
@@ -94,7 +99,18 @@ class ScanDialog(NXDialog):
 
     @property
     def scan_value(self):
-        return float(self.scan_box.text())
+        try:
+            return float(self.scan_box.text())
+        except ValueError:
+            return self.scan_box.text()
+
+    @property
+    def scan_directory(self):
+        return self.scandir_box.text()
+
+    @scan_directory.setter
+    def scan_directory(self, value):
+        self.scandir_box.setText(value)
 
     @property
     def scan_label(self):
@@ -104,27 +120,33 @@ class ScanDialog(NXDialog):
             return 'Scan Value'
 
     @property
-    def scan_directory(self):
+    def scan_name(self):
         value = self.scan_value
-        prefix = 'm' if value < 0 else ''
-        value = abs(value)
         if isinstance(value, float):
+            prefix = 'm' if value < 0 else ''
+            value = abs(value)
             if value.is_integer():
                 value_str = str(int(value))
             else:
                 value_str = str(value).replace('.', 'p')
+            units = self.scan_units
         else:
+            prefix = ''
             value_str = str(value)
+            units = ''
         scan_prefix = self.scan_parent.replace(self.sample, '').replace(
             'parent', '').strip('_')
         if scan_prefix:
-            return f"{scan_prefix}_{prefix}{value_str}{self.scan_units}"
+            return f"{scan_prefix}_{prefix}{value_str}{units}"
         else:
-            return f"{prefix}{value_str}{self.scan_units}"
+            return f"{prefix}{value_str}{units}"
 
     @property
-    def scan_name(self):
-        return self.sample + '_' + self.scan_directory + '.nxs'
+    def scan_file(self):
+        return self.sample + '_' + self.scandir_box.text() + '.nxs'
+
+    def update_scan(self):
+        self.scan_directory = self.scan_name
 
     def create_scan(self):
         scan_root = NXroot()
@@ -133,6 +155,7 @@ class ScanDialog(NXDialog):
             if entry != 'entry':
                 data_link = scan_root[f"{entry}/data/data"]
                 _target, _filename = data_link._target, data_link._filename
+                _filename = Path(self.scan_directory).joinpath(_filename)
                 scan_root[f"{entry}/data/data"] = NXlink(_target, _filename)
         scan_root[self.scan_path] = NXfield(self.scan_value,
                                             units=self.scan_units)
@@ -141,15 +164,22 @@ class ScanDialog(NXDialog):
             scan_info = parent_root['entry/nxscans']
             if 'filenames' not in scan_info:
                 scan_info['filenames'] = NXfield(
-                    [self.scan_name], dtype=string_dtype, maxshape=(None,))
-                scan_info['select'] = NXfield(
-                    [1], dtype=bool, maxshape=(None,))
-            elif self.scan_name not in scan_info['filenames']:
+                    [self.scan_file], dtype=string_dtype, maxshape=(None,))
+                if self.scan_directory != self.scan_name:
+                    scan_info['select'] = NXfield([0], dtype=bool,
+                                                  maxshape=(None,))
+                else:
+                    scan_info['select'] = NXfield([1], dtype=bool,
+                                                  maxshape=(None,))
+            elif self.scan_file not in scan_info['filenames']:
                 current_count = scan_info['filenames'].shape[0]
                 scan_info['filenames'].resize((current_count + 1,))
-                scan_info['filenames'][current_count] = self.scan_name
+                scan_info['filenames'][current_count] = self.scan_file
                 scan_info['select'].resize((current_count + 1,))
-                scan_info['select'][current_count] = 1
+                if self.scan_directory != self.scan_name:
+                    scan_info['select'][current_count] = 0
+                else:
+                    scan_info['select'][current_count] = 1
         return scan_root
 
     def make_scan(self):
@@ -157,7 +187,7 @@ class ScanDialog(NXDialog):
         label_directory = self.experiment_directory / self.sample / self.label
         scan_directory = label_directory / self.scan_directory
         scan_directory.mkdir(exist_ok=True)
-        scan_file = label_directory / self.scan_name
+        scan_file = label_directory / self.scan_file
         if scan_file.exists() and not confirm_action(
                 "Overwrite existing scan file?",
                 f"'{scan_file}' already exists."):
