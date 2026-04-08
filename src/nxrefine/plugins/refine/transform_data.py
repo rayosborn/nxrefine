@@ -66,13 +66,7 @@ class TransformDialog(NXDialog):
             pass
 
     def choose_entry(self):
-        try:
-            refine = NXRefine(self.entry)
-            if refine.xp is None:
-                raise NeXusError("No peaks in entry")
-        except NeXusError as error:
-            report_error("Refining Lattice", error)
-            return
+        refine = NXRefine(self.entry)
         self.refine = refine
         if self.layout.count() == 2:
             self.insert_layout(1, self.Qgrid)
@@ -168,7 +162,7 @@ class TransformDialog(NXDialog):
             if self.mask:
                 masked_output_file = self.get_output_file(mask=True)
                 self.refine.prepare_transform(masked_output_file, mask=True)
-            self.refine.write_settings(settings_file)
+            # self.refine.write_settings(settings_file)
             if self.copy:
                 root = self.entry.nxroot
                 for entry in [e for e in root
@@ -195,7 +189,7 @@ class TransformDialog(NXDialog):
                             mask=True, entry=root[entry])
                         self.refine.prepare_transform(
                             masked_output_file, mask=True)
-                    self.refine.write_settings(settings_file)
+                    # self.refine.write_settings(settings_file)
             super().accept()
         except NeXusError as error:
             report_error("Preparing Data Transform", error)

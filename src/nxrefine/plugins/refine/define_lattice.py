@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Copyright (c) 2022, Argonne National Laboratory.
+# Copyright (c) 2022-2026, Argonne National Laboratory.
 #
 # Distributed under the terms of an Open Source License.
 #
@@ -12,7 +12,7 @@ from nexpy.gui.dialogs import GridParameters, NXDialog
 from nexpy.gui.pyqt import getOpenFileName
 from nexpy.gui.utils import report_error
 from nexpy.gui.widgets import NXCheckBox, NXPushButton
-from nexusformat.nexus import NeXusError
+from nexusformat.nexus import NeXusError, nxopen
 from nxrefine.nxrefine import NXRefine
 
 
@@ -29,15 +29,26 @@ class LatticeDialog(NXDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.select_root(self.choose_entry)
+        self.set_layout(self.filebox('Choose Parent File'),
+                        self.close_layout(save=True))
 
-        self.import_button = NXPushButton('Import CIF', self.import_cif)
-        self.import_checkbox = NXCheckBox('Update Lattice Parameters')
-        self.set_layout(self.root_layout, self.close_buttons(save=True))
         self.set_title('Defining Lattice')
 
-    def choose_entry(self):
-        import gemmi.cif
+    def choose_file(self):
+        dirname = self.get_default_directory()
+        filename = Path(getOpenFileName(self, 'Open File', dirname,
+                                        filter="Parent Files (*_parent.nxs)"))
+        if filename.is_file():
+            self.filename.setText(str(filename))
+            self.set_default_directory(filename.parent)
+        else:
+            self.filename.setText('')
+            self.status_message.setText('No file selected')
+            return
+        self.parent_file = Path(self.filename.text())
+        with nxopen(self.parent_file) as parent_root:
+            self.root = parent_root
+
         self.refine = NXRefine(self.root['entry'])
         if self.layout.count() == 2:
             self.parameters = GridParameters()
@@ -70,7 +81,11 @@ class LatticeDialog(NXDialog):
             self.parameters['symmetry'].value = self.refine.symmetry
             self.parameters['centring'].value = self.refine.centring
             self.insert_layout(1, self.parameters.grid(header=False))
+            import gemmi.cif
             if gemmi.cif:
+                self.import_button = NXPushButton('Import CIF',
+                                                  self.import_cif)
+                self.import_checkbox = NXCheckBox('Update Lattice Parameters')
                 self.insert_layout(2, self.make_layout(self.import_button,
                                                        self.import_checkbox,
                                                        align='center'))
@@ -166,7 +181,7 @@ class LatticeDialog(NXDialog):
 
     @property
     def chemical_formula(self):
-        return self.refine.formula
+        return self.parameters['chemical_formula'].value
 
     @property
     def space_group(self):

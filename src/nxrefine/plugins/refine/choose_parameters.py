@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Copyright (c) 2022, Argonne National Laboratory.
+# Copyright (c) 2022-2026, Argonne National Laboratory.
 #
 # Distributed under the terms of an Open Source License.
 #
@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 from nexpy.gui.dialogs import GridParameters, NXDialog
 from nexpy.gui.plotview import NXPlotView
+from nexpy.gui.pyqt import getOpenFileName
 from nexpy.gui.utils import report_error
 from nexusformat.nexus import NeXusError, NXdata, NXfield, NXparameters, nxopen
 
@@ -30,12 +31,25 @@ class ParametersDialog(NXDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.select_root(self.choose_root)
-        self.set_layout(self.root_layout,
-                        self.close_buttons(save=True))
+        self.set_layout(self.filebox('Choose Parent File'),
+                        self.close_layout(save=True))
         self.set_title('Choose Parameters')
+        self.setMinimumWidth(450)
 
-    def choose_root(self):
+    def choose_file(self):
+        dirname = self.get_default_directory()
+        filename = Path(getOpenFileName(self, 'Open File', dirname,
+                                        filter="Parent Files (*_parent.nxs)"))
+        if filename.is_file():
+            self.filename.setText(str(filename))
+            self.set_default_directory(filename.parent)
+        else:
+            self.filename.setText('')
+            self.status_message.setText('No file selected')
+            return
+        self.parent_file = Path(self.filename.text())
+        with nxopen(self.parent_file) as parent_root:
+            self.root = parent_root
         self.entries = [self.root[entry]
                         for entry in self.root if entry[-1].isdigit()]
         self.reduce = NXMultiReduce(self.root)
@@ -59,13 +73,10 @@ class ParametersDialog(NXDialog):
         self.parameters.add('qmax', default['qmax'], 'Maximum Taper Q (Å-1)')
         self.parameters.add('radius', default['radius'], 'Punch Radius (Å)')
         self.parameters.add('scan_path', default['scan_path'], 'Scan Path')
+        self.parameters.add('scan_path', default['scan_path'], 'Scan Path')
 
         if self.layout.count() == 2:
             self.layout.insertLayout(1, self.parameters.grid(header=False))
-            self.layout.insertLayout(2, self.action_buttons(
-                ('Plot Q-Limits', self.plot_Q_limits)))
-            self.layout.insertLayout(3, 
-                self.checkboxes(('parent', 'Set As Parent', False)))
         self.read_parameters()
         self.directory = Path(self.root.nxfilename).parent
         self.sample = self.directory.parent.name
@@ -180,35 +191,9 @@ class ParametersDialog(NXDialog):
     def radius(self):
         return float(self.parameters['radius'].value)
 
-    def make_parent(self):
-        self.reduce.make_parent()
-
-    @property
-    def pv(self):
-        if 'Q-Limits' in self.plotviews:
-            return self.plotviews['Q-Limits']
-        else:
-            return NXPlotView('Q-Limits')
-
-    def plot_Q_limits(self):
-        self.reduce.qmin = self.qmin
-        self.reduce.qmax = self.qmax
-        self.pv.plot(NXdata(self.reduce.transmission_coordinates(),
-                            (NXfield(np.arange(self.reduce.shape[1]),
-                                     name='y'),
-                             NXfield(np.arange(self.reduce.shape[2]),
-                                     name='x')),
-                            title=f'Q-Limits: {self.root.nxname}'))
-        self.pv.aspect = 'equal'
-        self.pv.ytab.flipped = detector_flipped(self.reduce.entry)
-
     def accept(self):
         try:
             self.write_parameters()
-            if self.checkbox['parent'].isChecked():
-                if self.confirm_action(
-                    f"Set '{self.root.nxfilename}' as parent", answer='yes'):
-                    self.make_parent()
             super().accept()
         except NeXusError as error:
             report_error("Choosing Parameters", error)

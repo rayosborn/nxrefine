@@ -40,8 +40,6 @@ class ScanDialog(NXDialog):
                         self.close_layout(close=True))
         self.set_title('Creating New Scan(s)')
 
-        self.set_title('New Scan')
-
     def choose_file(self):
         dirname = self.get_default_directory()
         filename = Path(getOpenFileName(self, 'Open File', dirname,
@@ -166,20 +164,20 @@ class ScanDialog(NXDialog):
                 scan_info['filenames'] = NXfield(
                     [self.scan_file], dtype=string_dtype, maxshape=(None,))
                 if self.scan_directory != self.scan_name:
-                    scan_info['select'] = NXfield([0], dtype=bool,
+                    scan_info['selected'] = NXfield([0], dtype=bool,
                                                   maxshape=(None,))
                 else:
-                    scan_info['select'] = NXfield([1], dtype=bool,
+                    scan_info['selected'] = NXfield([1], dtype=bool,
                                                   maxshape=(None,))
             elif self.scan_file not in scan_info['filenames']:
                 current_count = scan_info['filenames'].shape[0]
                 scan_info['filenames'].resize((current_count + 1,))
                 scan_info['filenames'][current_count] = self.scan_file
-                scan_info['select'].resize((current_count + 1,))
+                scan_info['selected'].resize((current_count + 1,))
                 if self.scan_directory != self.scan_name:
-                    scan_info['select'][current_count] = 0
+                    scan_info['selected'][current_count] = 0
                 else:
-                    scan_info['select'][current_count] = 1
+                    scan_info['selected'][current_count] = 1
         return scan_root
 
     def make_scan(self):
