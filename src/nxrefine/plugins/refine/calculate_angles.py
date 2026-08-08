@@ -13,6 +13,8 @@ from nexusformat.nexus import NeXusError, NXdata, NXfield
 from nxrefine.nxreduce import NXReduce
 from nxrefine.nxrefine import NXRefine
 
+from ._dialog_helpers import add_parent_subentries
+
 
 def show_dialog():
     try:
@@ -26,8 +28,7 @@ class CalculateDialog(NXDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.select_entry(self.choose_entry, subentry=True,
-                          subentries_callback=self.get_parent_subentries)
+        self.select_entry(self.choose_entry)
         self.refine = NXRefine()
 
         self.parameters = GridParameters()
@@ -44,14 +45,9 @@ class CalculateDialog(NXDialog):
         self.set_title(f'{self.label} Calculate Angles')
         self._ui_built = False
 
-    def get_parent_subentries(self):
-        try:
-            reduce = NXReduce(self.entry)
-            if reduce.parent:
-                return [s.nxname for s in reduce.parent.root['entry'].NXsubentry]
-        except Exception:
-            pass
-        return []
+    def switch_root(self):
+        super().switch_root()
+        add_parent_subentries(self)
 
     def choose_entry(self):
         target = (self.entry[self.subentry]
