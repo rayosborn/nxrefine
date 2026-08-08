@@ -683,14 +683,14 @@ class NXReduce(QtCore.QObject):
             return
         self._registered_with_parent = True
         if 'entry/nxscans/parent' not in self.root:
-            return                                  # scan reports no parent
+            return
         parent = self.parent
         if parent is None or parent.filename == self.wrapper_file:
-            return                                  # missing parent, or self
+            return
         try:
             if self.wrapper_file.stem not in parent.scans:
                 parent.add_scan(self.wrapper_file, selected=True)
-                parent.reload_parent()              # refresh GUI tree if present
+                parent.reload_parent()
         except Exception as error:
             self.log(str(error))
 
@@ -1189,10 +1189,12 @@ class NXReduce(QtCore.QObject):
             self._prog_high = i
             total = self._prog_stop - self._start
             n = len(str(self._prog_stop))
-            bar_width = min(40, max(10, shutil.get_terminal_size().columns - 2*n - 8))
+            bar_width = min(
+                40, max(10, shutil.get_terminal_size().columns - 2*n - 8))
             filled = int(bar_width * (i - self._start) / max(total, 1))
             bar = '#' * filled + '.' * (bar_width - filled)
-            print(f"\r[{bar}] {i:{n}d} / {self._prog_stop}", end='', flush=True)
+            print(f"\r[{bar}] {i:{n}d} / {self._prog_stop}", end='',
+                  flush=True)
 
     def stop_progress(self):
         """Stop the progress counter and return the timer value."""
@@ -1461,7 +1463,6 @@ class NXReduce(QtCore.QObject):
         """
         self.log("Finding maximum counts")
 
-        # --- Phase 1: detect constantly-firing pixels (file opened then closed) ---
         chunk_size = self.field.chunks[0]
         if chunk_size < 20:
             chunk_size = 50
@@ -1477,9 +1478,7 @@ class NXReduce(QtCore.QObject):
             mask[np.where(pixel_max == pixel_mean)] = 1
             mask[np.where(pixel_mean < 100)] = 0
             pixel_mask = pixel_mask | mask
-        # File is now closed; concurrent workers will open it independently.
 
-        # --- Phase 2: pre-compute annulus sampling (same for all chunks) ---
         transmission_mask = self.transmission_coordinates()
         # Subsampled flat indices of the annulus pixels used to
         # estimate the per-frame transmission baseline as a
@@ -1551,7 +1550,7 @@ class NXReduce(QtCore.QObject):
                             else vsum + v_raw.sum(0))
                     vflat = v_raw.reshape(v_raw.shape[0], -1)
                     sub_vals = vflat[:, sub_idx]
-                    trimmed = np.partition(sub_vals, n_keep, axis=1)[:, :n_keep]
+                    trimmed = np.partition(sub_vals, n_keep, axis=1)[:,:n_keep]
                     psum[i:i+chunk_size] = trimmed.sum(axis=1) * scale
                     v = np.ma.masked_array(v_raw)
                     v.mask = pixel_mask
@@ -2057,8 +2056,17 @@ class NXReduce(QtCore.QObject):
                   'unit_cell_group', 'lattice_centring',
                   'unitcell_a', 'unitcell_b', 'unitcell_c',
                   'unitcell_alpha', 'unitcell_beta', 'unitcell_gamma']
+        # When a subentry is active, prefer the parent's subentry sample
+        # group so that subentry-specific lattice parameters are used.
+        # Fall back to the parent's root entry sample if the subentry
+        # does not contain a sample group.
         try:
-            parent_sample = self.parent.root['entry']['sample']
+            if (self.subentry_name
+                    and self.parent.subentry is not None
+                    and 'sample' in self.parent.subentry):
+                parent_sample = self.parent.subentry['sample']
+            else:
+                parent_sample = self.parent.root['entry']['sample']
         except (NeXusError, KeyError):
             return
         values = {f: parent_sample[f] for f in fields if f in parent_sample}

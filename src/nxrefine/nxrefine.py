@@ -448,13 +448,13 @@ class NXRefine:
                                                 self.centring)
             # Peak position arrays must all come from the same source.
             # Use the subentry's peaks if it has a complete set ('x'
-            # present); otherwise fall back to the parent to avoid size
-            # mismatches with a partial peaks group written by
+            # present); otherwise fall back to the parent entry to avoid
+            # size mismatches with a partial peaks group written by
             # write_angles (which only stores polar/azimuthal angles).
-            if (self.entry is not None
-                    and not ('peaks' in self.entry
-                             and 'x' in self.scan_entry['peaks'])):
-                _pk = self.entry
+            if (self.scan_entry is not None
+                    and 'peaks' in self.scan_entry
+                    and 'x' in self.scan_entry['peaks']):
+                _pk = self.scan_entry
             else:
                 _pk = self.entry
             self.xp = self._read_from(_pk, 'peaks/x')
@@ -1889,7 +1889,7 @@ class NXRefine:
         from lmfit import Parameters
         self.parameters = Parameters()
         if 'lattice' in opts:
-            self.define_lattice_parameters()
+            self.define_lattice_parameters(lattice=opts['lattice'])
             del opts['lattice']
         for opt in opts:
             self.parameters.add(opt, getattr(self, opt), vary=opts[opt])
