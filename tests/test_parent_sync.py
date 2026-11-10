@@ -2,9 +2,9 @@ import shutil
 
 import numpy as np
 import pytest
-from nexusformat.nexus import (NXdata, NXdetector, NXentry, NXfield,
-                               NXinstrument, NXsample, nxgetconfig, nxopen,
-                               nxsetconfig)
+from nexusformat.nexus import (NeXusError, NXcollection, NXdata, NXdetector,
+                               NXentry, NXfield, NXinstrument, NXmonitor,
+                               NXsample, nxgetconfig, nxopen, nxsetconfig)
 
 from nxrefine.nxparent import NXParent, groups_equal
 from nxrefine.scripts import nxparent as nxparent_script
@@ -40,6 +40,21 @@ def make_scan(path, value, group='result'):
             root['entry'][group] = NXdata(
                 NXfield(np.full(3, value, dtype=float), name='y'),
                 NXfield(np.arange(3), name='x'))
+
+
+def add_entry_groups(path, value, entry_name='f1'):
+    """Add the groups that NXReduce consolidates to a numbered entry."""
+    def field(name):
+        return NXfield(np.full(3, value, dtype=float), name=name)
+
+    axis = NXfield(np.arange(3), name='x')
+    with nxopen(path, 'rw') as root:
+        root[entry_name] = NXentry()
+        root[entry_name]['frame_sums'] = NXcollection()
+        root[entry_name]['frame_sums/summed_data'] = NXdata(
+            field('summed_data'), axis)
+        root[entry_name]['monitor'] = NXmonitor(field('MCS2'), axis)
+        root[entry_name]['peaks'] = NXdata(field('peaks'), axis)
 
 
 def add_orientation(path, entry_name, matrix):
@@ -168,6 +183,51 @@ class TestDataPaths:
         parent = make_registry(sample_dir / 'sample_scans.nxs',
                                ['sample_missing', 'sample_b'])
         assert list(parent._data_paths()) == [DATA_PATH]
+
+    def test_groups_of_numbered_entries_are_found(self, sample_dir):
+        make_scan(sample_dir / 'sample_a.nxs', 1.0)
+        add_entry_groups(sample_dir / 'sample_a.nxs', 1.0)
+        parent = make_registry(sample_dir / 'sample_scans.nxs', ['sample_a'])
+        assert list(parent._data_paths()) == [
+            DATA_PATH, '/f1/frame_sums/summed_data', '/f1/monitor']
+
+    def test_update_returns_the_paths_it_consolidated(self, sample_dir):
+        make_scan(sample_dir / 'sample_a.nxs', 1.0)
+        add_entry_groups(sample_dir / 'sample_a.nxs', 1.0)
+        parent_file = sample_dir / 'sample_scans.nxs'
+        parent = make_registry(parent_file, ['sample_a'])
+        assert parent.update_scan_data() == [
+            DATA_PATH, '/f1/frame_sums/summed_data', '/f1/monitor']
+        with nxopen(parent_file) as root:
+            assert root['f1/frame_sums/summed_data'].nxsignal.shape == (1, 3)
+            assert 'peaks' not in root['f1']
+
+    def test_update_adds_data_that_appear_later(self, sample_dir):
+        make_scan(sample_dir / 'sample_a.nxs', 1.0, group=None)
+        make_scan(sample_dir / 'sample_b.nxs', 2.0, group=None)
+        parent_file = sample_dir / 'sample_scans.nxs'
+        parent = make_registry(parent_file, ['sample_a', 'sample_b'])
+        assert parent.update_scan_data() == []
+        make_scan(sample_dir / 'sample_b.nxs', 2.0)
+        assert parent.update_scan_data() == [DATA_PATH]
+        assert consolidated(parent_file).tolist() == [[2.0] * 3]
+
+    def test_update_logs_a_failure_and_continues(self, sample_dir, caplog,
+                                                 monkeypatch):
+        make_scan(sample_dir / 'sample_a.nxs', 1.0)
+        add_entry_groups(sample_dir / 'sample_a.nxs', 1.0)
+        parent = make_registry(sample_dir / 'sample_scans.nxs', ['sample_a'])
+        original = NXParent.create_scan_data
+
+        def create_scan_data(self, data_path):
+            if data_path == DATA_PATH:
+                raise NeXusError('cannot consolidate')
+            return original(self, data_path)
+
+        monkeypatch.setattr(NXParent, 'create_scan_data', create_scan_data)
+        assert parent.update_scan_data() == [
+            '/f1/frame_sums/summed_data', '/f1/monitor']
+        assert 'cannot consolidate' in caplog.text
 
     def test_update_builds_data_from_scans_that_have_it(self, sample_dir):
         make_scan(sample_dir / 'sample_a.nxs', 1.0, group=None)
@@ -339,7 +399,9 @@ class TestNXParentScript:
         make_scan(sample_dir / 'sample_a.nxs', 1.0)
         make_registry(source, ['sample_a'], settings={'threshold': 7})
         self.run(monkeypatch, tmp_path, '--merge', str(source), '--update')
-        assert 'add scan sample_a' in capsys.readouterr().out
+        output = capsys.readouterr().out
+        assert 'add scan sample_a' in output
+        assert DATA_PATH in output.split()
         parent_file = sample_dir / 'sample_scans.nxs'
         assert NXParent(parent_file).get_setting('threshold') == 7
         assert consolidated(parent_file).tolist() == [[1.0] * 3]
@@ -355,6 +417,24 @@ class TestNXParentScript:
         assert NXParent(parent_file).get_setting('threshold') == 3
         self.run(monkeypatch, tmp_path, '--merge', str(source), '--overwrite')
         assert NXParent(parent_file).get_setting('threshold') == 7
+
+    def test_update_syncs_scans_in_the_chosen_subentry(
+            self, tmp_path, monkeypatch):
+        sample_dir = make_directory_structure(tmp_path)[1].parent
+        parent_file = sample_dir / 'sample_scans.nxs'
+        make_registry(parent_file, [])
+        make_scan(sample_dir / 'sample_a.nxs', 1.0)
+        registered = []
+
+        def sync_scans(self, selected=True):
+            registered.append(self.subentry_name)
+            return []
+
+        monkeypatch.setattr(NXParent, 'sync_scans', sync_scans)
+        self.run(monkeypatch, tmp_path, '--update')
+        assert registered == ['']
+        self.run(monkeypatch, tmp_path, '--update', '--subentry', 'other')
+        assert registered == ['', 'other']
 
     def test_update_requires_an_existing_parent(self, tmp_path, monkeypatch):
         make_directory_structure(tmp_path)

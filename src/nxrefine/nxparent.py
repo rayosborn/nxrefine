@@ -19,6 +19,11 @@ from nexusformat.nexus import (NeXusError, NXcollection, NXdata, NXentry,
 from nexusformat.nexus.tree import natural_sort, string_dtype
 
 
+SKIPPED_GROUPS = frozenset(
+    {'data', 'nxscans', 'nxworkflow', 'nxreduce', 'instrument', 'sample'})
+ENTRY_GROUPS = ('monitor', 'frame_sums')
+
+
 def format_scan_prefix(prefix, sample):
     """Return the scan-directory prefix implied by `prefix` for `sample`.
 
@@ -833,12 +838,18 @@ class NXParent:
         parent and its scans are copied to another location together.
         A parent consolidated earlier, which has absolute paths, is
         updated by consolidating it again, e.g., with `update_scan_data`.
+
+        Returns
+        -------
+        bool
+            True if the data were consolidated, False if none of the
+            selected scans contain them.
         """
         with self.consolidation_lock:
             self.refresh()
             scan_files = self.valid_scans(data_path)
             if not scan_files:
-                return
+                return False
             scan_data = nxconsolidate(scan_files, data_path,
                                       scan_path=self.scan_path,
                                       relative_to=self.filename)
@@ -859,6 +870,7 @@ class NXParent:
                 if data_path in root:
                     del root[data_path]
                 root[data_path] = scan_data
+            return True
 
     def refresh(self):
         """Reread the parent file if it has been changed by another process."""
@@ -867,51 +879,89 @@ class NXParent:
         except NeXusError:
             pass
 
+    @staticmethod
+    def _nxdata_paths(group, path, only=None):
+        """Return the paths of the NXdata groups at depth 1 and 2 in a group.
+
+        Groups named in `SKIPPED_GROUPS` and NXentry/NXsubentry children
+        are excluded from recursion so that raw data and metadata are not
+        consolidated.
+
+        Parameters
+        ----------
+        group : NXgroup
+            Group in a scan file to be searched.
+        path : str
+            Path of the group within the scan file.
+        only : tuple of str, optional
+            Names of the only children to search, by default all of them.
+        """
+        found = []
+        for name, child in group.entries.items():
+            if name in SKIPPED_GROUPS or (only and name not in only):
+                continue
+            path1 = f'{path}/{name}'
+            if isinstance(child, NXdata):
+                found.append(path1)
+            elif isinstance(child, NXgroup) and not isinstance(
+                    child, (NXentry, NXsubentry)):
+                found.extend(f'{path1}/{name2}' for name2, grandchild
+                             in child.entries.items()
+                             if isinstance(grandchild, NXdata))
+        return found
+
     def _data_paths(self):
-        """Yield NXdata paths at depth 1 and 2 under entry_path in scan files.
+        """Yield the paths of the NXdata groups in the selected scan files.
 
         Opens each selected scan file to discover what groups exist, since
         a scan that has not been completely processed may lack groups that
         others have, then yields only the paths that correspond to NXdata
-        groups. Groups named in _skip and NXentry/NXsubentry children are
-        excluded from recursion so that raw data and metadata are not
-        consolidated. Each scan file is closed before any path is yielded
-        so its lock is not held across subsequent consolidation calls.
+        groups. These are the groups at depth 1 and 2 under `entry_path`,
+        such as the transform and the PDF, and the `monitor` and
+        `frame_sums` groups of the numbered entries (f1, f2, ...), or of
+        their subentry of the same name as the current one. Each scan file
+        is closed before any path is yielded so its lock is not held across
+        subsequent consolidation calls.
         """
-        _skip = frozenset(
-            {'data', 'nxscans', 'nxworkflow', 'nxreduce', 'instrument',
-             'sample'})
         paths = []
+        suffix = f'/{self._subentry}' if self._subentry else ''
         for scan_file in self.selected_scans:
             try:
                 with nxopen(scan_file) as scan_root:
-                    target = scan_root[self.entry_path]
-                    for name, child in target.entries.items():
-                        if name in _skip:
-                            continue
-                        path1 = f'{self.entry_path}/{name}'
-                        if isinstance(child, NXdata):
-                            found = [path1]
-                        elif isinstance(child, NXgroup) and not isinstance(
-                                child, (NXentry, NXsubentry)):
-                            found = [f'{path1}/{name2}' for name2, grandchild
-                                     in child.entries.items()
-                                     if isinstance(grandchild, NXdata)]
-                        else:
-                            found = []
-                        paths.extend(p for p in found if p not in paths)
+                    found = self._nxdata_paths(scan_root[self.entry_path],
+                                               self.entry_path)
+                    for name, entry in scan_root.entries.items():
+                        path = f'/{name}{suffix}'
+                        if (isinstance(entry, NXentry) and name[-1].isdigit()
+                                and path in scan_root):
+                            found.extend(self._nxdata_paths(
+                                scan_root[path], path, only=ENTRY_GROUPS))
+                    paths.extend(p for p in found if p not in paths)
             except (NeXusError, OSError, KeyError):
                 continue
         yield from paths
 
     def update_scan_data(self):
-        """Consolidate scan data for all discovered NXdata groups."""
+        """Consolidate scan data for all discovered NXdata groups.
+
+        A group whose data cannot be consolidated is logged and skipped,
+        so that one failure does not prevent the others from being
+        updated.
+
+        Returns
+        -------
+        list of str
+            Paths of the groups that were consolidated.
+        """
         self.refresh()
+        updated = []
         for data_path in self._data_paths():
             try:
-                self.create_scan_data(data_path)
-            except NeXusError:
-                pass
+                if self.create_scan_data(data_path):
+                    updated.append(data_path)
+            except NeXusError as error:
+                logging.warning(f"Could not consolidate {data_path}: {error}")
+        return updated
 
     def reload(self):
         try:

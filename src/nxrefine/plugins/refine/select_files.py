@@ -26,7 +26,9 @@ class ScanDataWorker(QtCore.QObject):
     Lives independently of the FilesDialog so the dialog can close
     immediately while the (potentially slow) consolidation continues.
     A Qt signal is emitted on completion so that reload() is called on
-    the main thread via the event loop.
+    the main thread via the event loop. The paths of the consolidated
+    groups are then in `updated`, or the message of the error that
+    stopped the update is in `error`.
     """
 
     finished = QtCore.Signal()
@@ -34,6 +36,8 @@ class ScanDataWorker(QtCore.QObject):
     def __init__(self, nxparent):
         super().__init__()
         self._parent = nxparent
+        self.updated = []
+        self.error = None
         _active_workers.add(self)
         self.finished.connect(nxparent.reload)
         self.finished.connect(lambda: _active_workers.discard(self))
@@ -42,7 +46,10 @@ class ScanDataWorker(QtCore.QObject):
         threading.Thread(target=self._run, daemon=True).start()
 
     def _run(self):
-        self._parent.update_scan_data()
+        try:
+            self.updated = self._parent.update_scan_data()
+        except Exception as error:
+            self.error = str(error)
         self.finished.emit()
 
 

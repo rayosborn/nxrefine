@@ -58,8 +58,12 @@ def main():
                              'parent file that differs from the one being '
                              'merged')
     parser.add_argument('-u', '--update', action='store_true',
-                        help='rebuild the consolidated datasets in the '
-                             'parent file from the scan files')
+                        help='register the scan files that name the parent '
+                             'file, then rebuild its consolidated datasets '
+                             'from them, listing those that were updated')
+    parser.add_argument('--subentry', default=None,
+                        help='with --update, the subentry of the parent file '
+                             'to update (default: the main entry)')
     parser.add_argument('--check', action='store_true',
                         help='list what the parent file lacks before it can '
                              'be copied to another machine')
@@ -102,7 +106,10 @@ def main():
             if not parent_file.is_file():
                 parser.error(f"'{parent_file}' does not exist")
             try:
-                parent.update_scan_data()
+                parent = NXParent(parent_file, subentry=args.subentry)
+                parent.sync_scans()
+                for path in parent.update_scan_data():
+                    print(path)
             except Exception as error:
                 print(f"nxparent: {error}", file=sys.stderr)
                 sys.exit(FAILED)
