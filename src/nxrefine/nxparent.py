@@ -827,6 +827,12 @@ class NXParent:
         processes since this instance was created are included, and a
         consolidation that started earlier cannot overwrite a later one
         with a shorter list of scans.
+
+        The scan files are stored as paths relative to the directory of
+        the parent, so the consolidated data are still found when the
+        parent and its scans are copied to another location together.
+        A parent consolidated earlier, which has absolute paths, is
+        updated by consolidating it again, e.g., with `update_scan_data`.
         """
         with self.consolidation_lock:
             self.refresh()
@@ -834,7 +840,8 @@ class NXParent:
             if not scan_files:
                 return
             scan_data = nxconsolidate(scan_files, data_path,
-                                      scan_path=self.scan_path)
+                                      scan_path=self.scan_path,
+                                      relative_to=self.filename)
             parts = data_path.strip('/').split('/')
             intermediate_types = []
             if len(parts) > 1:

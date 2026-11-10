@@ -1,3 +1,5 @@
+import shutil
+
 import numpy as np
 import pytest
 from nexusformat.nexus import (NXdata, NXdetector, NXentry, NXfield,
@@ -87,6 +89,32 @@ class TestCreateScanData:
             info['selected'][1] = True
         stale.create_scan_data(DATA_PATH)
         assert consolidated(parent_file).tolist() == [[1.0] * 3, [2.0] * 3]
+
+    def test_scan_files_are_stored_relative_to_the_parent(self, sample_dir):
+        parent_file = sample_dir / 'sample_scans.nxs'
+        (sample_dir / '30K').mkdir()
+        make_scan(sample_dir / 'sample_a.nxs', 1.0)
+        make_scan(sample_dir / '30K' / 'sample_b.nxs', 2.0)
+        parent = make_registry(parent_file, ['sample_a', '30K/sample_b'])
+        parent.create_scan_data(DATA_PATH)
+        with nxopen(parent_file) as root:
+            sources = root.nxfile['entry/result/y'].virtual_sources()
+        assert [s.file_name for s in sources] == [
+            'sample_a.nxs', '30K/sample_b.nxs']
+
+    def test_consolidated_data_are_found_after_moving_the_directory(
+            self, sample_dir):
+        parent_file = sample_dir / 'sample_scans.nxs'
+        (sample_dir / '30K').mkdir()
+        make_scan(sample_dir / 'sample_a.nxs', 1.0)
+        make_scan(sample_dir / '30K' / 'sample_b.nxs', 2.0)
+        parent = make_registry(parent_file, ['sample_a', '30K/sample_b'])
+        parent.create_scan_data(DATA_PATH)
+        moved = sample_dir.parent / 'copy' / 'deeper'
+        moved.parent.mkdir()
+        shutil.move(sample_dir, moved)
+        assert (consolidated(moved / 'sample_scans.nxs').tolist()
+                == [[1.0] * 3, [2.0] * 3])
 
     def test_scan_list_is_read_with_the_consolidation_lock_held(
             self, sample_dir, lock_timeout, monkeypatch):
